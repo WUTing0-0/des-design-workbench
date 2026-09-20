@@ -28,6 +28,7 @@ LEGACY = P75 / "legacy_source"
 OLD = PROJECT / "outputs_v3" / "outputs_v3"
 CHEMBERTA = PROJECT / "models" / "models" / "ChemBERTa-zinc-base-v1"
 TABPFN_CKPT = PROJECT / "数据" / "数据" / "训练" / "tabpfn-v2.6-regressor-v2.6_default.ckpt"
+os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
 
 if str(LEGACY) not in sys.path:
     sys.path.insert(0, str(LEGACY))
