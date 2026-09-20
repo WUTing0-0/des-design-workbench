@@ -1,34 +1,61 @@
 # DES Design Workbench
 
-This interface calculates a complete binary composition curve while keeping experimental inputs, model estimates and physical assumptions visibly separate.
+A provenance-aware interface for composition-resolved deep-eutectic-solvent screening. The complete local workflow is:
 
-## User workflow
+`SMILES → reviewed property lookup → missing-property inference → SLE/COSMO-SAC → frozen B4 correction → calibrated range`
 
-1. Enter two components and their melting temperatures and fusion enthalpies.
-2. Mark every pure property as experimental or model-estimated.
-3. Choose the liquid-phase route:
-   - ideal fallback, with both activity coefficients fixed to one;
-   - upload a precomputed curve with columns `x,gamma1,gamma2`;
-   - upload two standardized sigma-profile CSV files with columns `sigma,p_sigma`, plus the ORCA-derived molecular area and volume. The browser then evaluates the same COSMO-SAC segment and combinatorial equations used in the frozen workflow at 298.15 K.
-4. Search the full composition range from 0.02 to 0.98 and inspect the physical liquidus minimum.
-5. When the local service is connected, apply the frozen B4 correction and report 90% marginal calibration ranges for minimum temperature and composition. These ranges describe coverage across comparable unseen pairs; they are not guarantees for an individual chemistry.
-6. Export results and record new measurements in a local update queue. Contributions are reviewed for a versioned six- or twelve-month release; the published model is never retrained silently online.
+## What the interface does
 
-## Run the full local version
+1. Accepts two molecular structures as SMILES.
+2. Canonicalizes each structure and searches the frozen, experiment-first pure-property table.
+3. Preserves reviewed experimental melting points and fusion enthalpies. Only missing values are predicted:
+   - neutral melting point: four-layer GIN;
+   - neutral fusion enthalpy: TabPFN;
+   - salt melting point: role-aware cation/anion G-TabPFN;
+   - salt fusion enthalpy: TabPFN.
+4. Calculates the binary hard-max SLE curve from `x = 0.02–0.98` using either ideal activity coefficients, a user-supplied `gamma(x)` table, or two sigma profiles.
+5. Applies the frozen B4 phase-equilibrium model when the local service is available.
+6. Reports a calibrated marginal range, provenance and model limitations instead of presenting a point estimate as exact.
 
-The service expects the frozen release at `C:\code2026\DES_Paper_Release`. Set `DES_WORKFLOW_ROOT` and `DES_PROJECT_ROOT` if it is stored elsewhere, then run:
+The hosted static preview performs the physical browser calculation. Full property inference and B4 correction run locally because the frozen scientific models, reviewed database and third-party foundation weights are not embedded in the public website.
+
+## Run the full local workflow
+
+Create a Python environment compatible with `requirements-local.txt`. The tested Windows environment uses Python 3.12, PyTorch 2.6 CPU, RDKit 2026.03.4, scikit-learn 1.5.2 and the TabPFN 7.1.1 runtime with the frozen v2.6 regression checkpoint. Then set these optional paths if your release is not stored in the defaults:
 
 ```text
-python local_server.py
+DES_WORKFLOW_ROOT=C:\code2026\DES_Paper_Release
+DES_PROJECT_ROOT=C:\code2026
+DES_TABPFN_DEVICE=cpu
 ```
 
-Open `http://127.0.0.1:4173`. The B4 status changes from `offline` to `ready` when the archived model pack has loaded.
+Start `local_server.py` and open `http://127.0.0.1:4173`.
 
-Required packages are `numpy`, `pandas`, `scikit-learn`, `joblib` and `rdkit`, using versions compatible with the archived model manifest.
+The first unseen-molecule inference is slow on CPU because the molecular encoders and TabPFN context are loaded once. A CUDA environment is recommended for repeated arbitrary-structure inference. Exact database matches return immediately. The frozen scientific setting uses 16 TabPFN estimators; `DES_TABPFN_ESTIMATORS` exists only for smoke testing and must not be used for reported results.
+
+## Required private/release artifacts
+
+The repository intentionally excludes raw licensed datasets, pretrained foundation checkpoints and frozen model binaries. `MODEL_MANIFEST.json` records their expected release-relative locations, reference metrics and SHA-256 hashes. Publication archives should supply these artifacts through the paper data repository, subject to their original licenses.
+
+## Input formats
+
+- Salt structures must contain one dot-separated cation and one anion. Ion roles are assigned from formal charges; ambiguous multi-fragment structures are rejected rather than guessed.
+- Activity curve CSV: `x,gamma1,gamma2`.
+- Sigma profile CSV: `sigma,p_sigma` on the same 51-point grid for both components, plus molecular area and volume.
+- Temperatures are Kelvin; fusion enthalpies are kJ mol⁻¹.
 
 ## Scientific boundaries
 
-- The public browser version calculates physical SLE references. It does not fake model correction when the frozen Python service is absent.
-- A low-temperature prediction is not proof of DES formation, novelty, safety, single-phase stability or experimental reproducibility.
-- Experimental pure-component values should replace model estimates whenever identity, solid form, units and transition meaning have been checked.
-- Community measurements enter a review queue and become eligible only for a later versioned model release with new hashes, metrics and release notes.
+- Experimental pure-component values are used only after identity, units, solid form and transition meaning have been reviewed.
+- Model MAEs are population-level reference errors, not molecule-specific confidence probabilities.
+- The reported B4 temperature/composition ranges are marginally calibrated over comparable unseen pairs; they are not 90% guarantees for an individual chemistry.
+- A low predicted liquidus temperature is not evidence of DES formation, novelty, safety, single-phase stability or experimental reproducibility.
+- Submitted measurements enter a review queue. The published model is updated only in a new versioned release; it is never retrained silently online.
+
+## Repository layout
+
+- `dist/`: static browser interface and physical calculations.
+- `local_server.py`: local HTTP service for B4 and property resolution.
+- `property_inference.py`: experiment-first lookup and unified four-model inference interface.
+- `MODEL_MANIFEST.json`: frozen artifact contract and hashes.
+- `requirements-local.txt`: local runtime requirements.

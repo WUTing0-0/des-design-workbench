@@ -36,6 +36,7 @@
           <article class="component component-a">
             <div class="component-title"><span>A</span><input id="nameA" value="Component A" aria-label="Component A name" /></div>
             <label>SMILES <input id="smilesA" placeholder="e.g. NC(=O)N" /></label>
+            <label class="class-field">Component class<select id="classA"><option value="auto">Detect from SMILES</option><option value="neutral">Neutral molecule</option><option value="salt">Salt · cation.anion</option></select></label>
             <div class="property-row">
               <label>Melting point <span>K</span><input id="tmA" type="number" value="405" step="0.1" /></label>
               <select id="tmSourceA" aria-label="Melting point source A"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
@@ -44,11 +45,13 @@
               <label>Fusion enthalpy <span>kJ mol⁻¹</span><input id="hfA" type="number" value="14.5" step="0.1" /></label>
               <select id="hfSourceA" aria-label="Fusion enthalpy source A"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
             </div>
+            <p class="resolve-note" id="resolveNoteA">Enter a structure to query the reviewed property table.</p>
           </article>
 
           <article class="component component-b">
             <div class="component-title"><span>B</span><input id="nameB" value="Component B" aria-label="Component B name" /></div>
             <label>SMILES <input id="smilesB" placeholder="e.g. CC(=O)N" /></label>
+            <label class="class-field">Component class<select id="classB"><option value="auto">Detect from SMILES</option><option value="neutral">Neutral molecule</option><option value="salt">Salt · cation.anion</option></select></label>
             <div class="property-row">
               <label>Melting point <span>K</span><input id="tmB" type="number" value="353" step="0.1" /></label>
               <select id="tmSourceB" aria-label="Melting point source B"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
@@ -57,8 +60,13 @@
               <label>Fusion enthalpy <span>kJ mol⁻¹</span><input id="hfB" type="number" value="12.0" step="0.1" /></label>
               <select id="hfSourceB" aria-label="Fusion enthalpy source B"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
             </div>
+            <p class="resolve-note" id="resolveNoteB">Enter a structure to query the reviewed property table.</p>
           </article>
         </div>
+        <button class="property-action" id="resolveProperties" disabled>
+          <span>Complete pure properties from SMILES</span>
+          <small id="propertyServiceLabel">Requires the local model service</small>
+        </button>
 
         <div class="activity-block">
           <div class="block-title"><div><span class="eyebrow">LIQUID NON-IDEALITY</span><h2>Activity-coefficient route</h2></div><span class="help">evaluated at 298.15 K</span></div>

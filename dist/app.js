@@ -4,6 +4,8 @@ let lastResult = null;
 let gammaUpload = null;
 let sigmaA = null, sigmaB = null;
 let modelServiceReady = false;
+let propertyServiceReady = false;
+const propertyResolution = {A:null,B:null};
 
 function parseCSV(text){
   const rows=text.trim().split(/\r?\n/).filter(Boolean).map(r=>r.split(',').map(v=>v.trim()));
@@ -64,6 +66,39 @@ function supportSummary(){
   if(model<=2)return ['Moderate input support',`${model} model-supplied pure-property inputs`];
   return ['Exploratory input support','Most pure properties are model-supplied'];
 }
+function propertyLine(result){
+  const tm=result.properties.tm,hf=result.properties.hfus;
+  const fmt=(p,label)=>p.origin==='experimental'?`${label}: reviewed experiment`:`${label}: ${p.model} (reference MAE ${p.reference_mae.toFixed(2)} ${p.unit})`;
+  return `${result.matched_database?'Database match':'New structure'} · ${fmt(tm,'Tm')} · ${fmt(hf,'ΔHfus')}`;
+}
+async function resolveComponent(side){
+  const smiles=$(`smiles${side}`).value.trim();
+  if(!smiles)throw new Error(`Enter the SMILES for component ${side}.`);
+  const selected=$(`class${side}`).value;
+  const response=await fetch('/api/properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({smiles,componentClass:selected==='auto'?null:selected})});
+  const result=await response.json();if(!response.ok)throw new Error(`Component ${side}: ${result.error||'property resolution failed'}`);
+  propertyResolution[side]=result;
+  $(`smiles${side}`).value=result.canonical_smiles;
+  $(`class${side}`).value=result.component_class;
+  if(result.name&&$(`name${side}`).value.match(/^Component [AB]$/))$(`name${side}`).value=result.name;
+  $(`tm${side}`).value=result.properties.tm.value.toFixed(2);
+  $(`hf${side}`).value=result.properties.hfus.value.toFixed(3);
+  $(`tmSource${side}`).value=result.properties.tm.origin;
+  $(`hfSource${side}`).value=result.properties.hfus.origin;
+  const note=$(`resolveNote${side}`);note.textContent=propertyLine(result);note.className=`resolve-note ${result.warning?'warning':'resolved'}`;
+  return result;
+}
+async function resolveProperties(){
+  const button=$('resolveProperties');$('errorBox').classList.add('hidden');button.disabled=true;
+  button.querySelector('span').textContent='Resolving reviewed data and missing properties…';
+  $('propertyServiceLabel').textContent='First model inference can take a minute';
+  try{
+    const [a,b]=await Promise.all([resolveComponent('A'),resolveComponent('B')]);
+    $('systemType').value=a.component_class==='neutral'&&b.component_class==='neutral'?'Type V':a.component_class==='salt'&&b.component_class==='salt'?'Type I':'Type III';
+    button.querySelector('span').textContent='Pure properties completed';$('propertyServiceLabel').textContent='Experimental values used first · missing values modelled';
+  }catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');button.querySelector('span').textContent='Complete pure properties from SMILES';$('propertyServiceLabel').textContent='Correct the structure and try again';}
+  finally{button.disabled=!propertyServiceReady;}
+}
 async function calculate(){
   $('errorBox').classList.add('hidden');
   try{
@@ -111,8 +146,11 @@ function queue(){return JSON.parse(localStorage.getItem('des-update-queue')||'[]
 document.querySelectorAll('input[name=activity]').forEach(r=>r.addEventListener('change',()=>{$('gammaPanel').classList.toggle('hidden',r.value!=='gamma'||!r.checked);$('sigmaPanel').classList.toggle('hidden',r.value!=='sigma'||!r.checked);}));
 $('gammaFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const rows=parseCSV(await f.text()).map(r=>({x:Number(r.x),gamma1:Number(r.gamma1),gamma2:Number(r.gamma2)}));if(rows.some(r=>Object.values(r).some(v=>!Number.isFinite(v)))){gammaUpload=null;$('gammaFileName').textContent='Invalid CSV';return;}gammaUpload=rows;$('gammaFileName').textContent=f.name;});
 $('calculate').addEventListener('click',calculate);$('exportResult').addEventListener('click',()=>lastResult?download('des-screening-result.json',lastResult):null);
+$('resolveProperties').addEventListener('click',resolveProperties);
+$('smilesA').addEventListener('input',()=>{propertyResolution.A=null;$('resolveNoteA').textContent='Structure changed; resolve properties again.';$('resolveNoteA').className='resolve-note';});
+$('smilesB').addEventListener('input',()=>{propertyResolution.B=null;$('resolveNoteB').textContent='Structure changed; resolve properties again.';$('resolveNoteB').className='resolve-note';});
 $('loadDemo').addEventListener('click',()=>{Object.entries({nameA:'Illustrative component A',nameB:'Illustrative component B',smilesA:'NC(=O)N',smilesB:'CC(=O)N',tmA:405,tmB:353,hfA:14.5,hfB:12}).forEach(([k,v])=>$(k).value=v);document.querySelector('input[name=activity][value=ideal]').click();calculate();});
 $('saveMeasurement').addEventListener('click',()=>{const value=Number($('measurementValue').value);if(!Number.isFinite(value))return;const q=queue();q.push({created:new Date().toISOString(),type:$('measurementType').value,value,note:$('measurementNote').value,system:lastResult?.inputs||null});localStorage.setItem('des-update-queue',JSON.stringify(q));$('measurementValue').value='';$('measurementNote').value='';updateCount();});
 $('exportQueue').addEventListener('click',()=>download('des-model-update-queue.json',{exported:new Date().toISOString(),policy:'candidate for reviewed periodic release; no online retraining',records:queue()}));
 updateCount();draw([{x:.02,t:390},{x:.2,t:340},{x:.4,t:310},{x:.6,t:315},{x:.8,t:335},{x:.98,t:355}],{x:.4,t:310});
-fetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(()=>{modelServiceReady=true;$('useCorrection').disabled=false;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B4 inference service connected';}).catch(()=>{});
+fetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed components · four frozen models ready`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B4 inference service connected';}).catch(()=>{});

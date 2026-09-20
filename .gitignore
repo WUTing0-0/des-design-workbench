@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .sites-runtime/
+runtime_models/
+*.ckpt
+*.pt

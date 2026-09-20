@@ -12,6 +12,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from property_inference import PropertyResolver
+
 ROOT = Path(__file__).resolve().parent
 RELEASE = Path(os.environ.get("DES_WORKFLOW_ROOT", r"C:\code2026\DES_Paper_Release")).resolve()
 PROJECT = Path(os.environ.get("DES_PROJECT_ROOT", r"C:\code2026")).resolve()
@@ -25,6 +27,7 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 pack = joblib.load(PACK_PATH)
+property_resolver = PropertyResolver()
 
 
 def predict(payload: dict) -> list[float]:
@@ -57,14 +60,21 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/health":
-            return self.send_json(200, {"status": "ready", "model": "frozen B4 direct"})
+            return self.send_json(200, {
+                "status": "ready", "model": "frozen B4 direct",
+                "properties": property_resolver.ready_summary,
+            })
         return super().do_GET()
 
     def do_POST(self):
-        if self.path != "/api/predict":
+        if self.path not in {"/api/predict", "/api/properties"}:
             return self.send_json(404, {"error": "not found"})
         try:
             payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            if self.path == "/api/properties":
+                return self.send_json(200, property_resolver.resolve(
+                    payload.get("smiles", ""), payload.get("componentClass")
+                ))
             return self.send_json(200, {"predictions": predict(payload)})
         except Exception as exc:
             return self.send_json(400, {"error": f"{type(exc).__name__}: {exc}"})
