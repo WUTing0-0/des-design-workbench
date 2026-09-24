@@ -12,7 +12,7 @@ function parseCSV(text){
   const head=rows[0].map(x=>x.toLowerCase());
   return rows.slice(1).map(r=>Object.fromEntries(head.map((h,i)=>[h,r[i]])));
 }
-function num(id){ const v=Number($(id).value); if(!Number.isFinite(v)) throw new Error(`Check ${id}.`); return v; }
+function num(id){ const raw=$(id).value.trim(); const v=Number(raw); if(!raw||!Number.isFinite(v)) throw new Error('Complete all melting temperatures and fusion enthalpies, or load the example.'); return v; }
 function branch(x,gamma,tm,h){
   const den=1/tm-(R/(h*1000))*Math.log(Math.max(1e-12,x*gamma));
   const t=den>0?1/den:NaN;
@@ -51,20 +51,16 @@ function sigmaGamma(c1,c2,x,T=298.15){
 async function fileProfile(file,area,volume){
   if(!file) throw new Error('Choose both sigma-profile CSV files.');
   const rows=parseCSV(await file.text()); const sigma=rows.map(r=>Number(r.sigma)); const p=rows.map(r=>Number(r.p_sigma));
-  if(!sigma.length||sigma.some(v=>!Number.isFinite(v))||p.some(v=>!Number.isFinite(v))) throw new Error('Profile CSV must contain numeric sigma and p_sigma columns.');
+  if(sigma.length!==51||sigma.some((v,i)=>!Number.isFinite(v)||Math.abs(v-(-.025+i*.001))>1e-8)||p.some(v=>!Number.isFinite(v)||v<0)||p.reduce((a,b)=>a+b,0)<=0||area<=0||volume<=0) throw new Error('Use a non-negative profile on the 51-point −0.025 to 0.025 grid, with positive area and volume.');
   const sum=p.reduce((a,b)=>a+b,0); return {sigma,p:p.map(v=>v/sum),area,volume};
 }
 function sourceSummary(){
+  if(['A','B'].some(side=>$(`name${side}`).value.startsWith('Illustrative component')))return 'Illustrative inputs — not experimental or fitted-model evidence';
   const ids=['tmSourceA','hfSourceA','tmSourceB','hfSourceB']; const model=ids.filter(id=>$(id).value==='model').length;
   return model?`${4-model}/4 experimental; ${model}/4 estimated`:'4/4 experimental inputs';
 }
 function supportSummary(){
-  const model=['tmSourceA','hfSourceA','tmSourceB','hfSourceB'].filter(id=>$(id).value==='model').length;
-  const smiles=[$('smilesA').value,$('smilesB').value].filter(Boolean).length;
-  if(model===0&&smiles===2)return ['Higher input support','All pure properties marked experimental'];
-  if(smiles<2)return ['Moderate input support','Add both structures for model correction'];
-  if(model<=2)return ['Moderate input support',`${model} model-supplied pure-property inputs`];
-  return ['Exploratory input support','Most pure properties are model-supplied'];
+  return ['Not assessed','Property provenance is not an applicability score'];
 }
 function propertyLine(result){
   const tm=result.properties.tm,hf=result.properties.hfus;
@@ -93,14 +89,15 @@ async function resolveProperties(){
   button.querySelector('span').textContent='Resolving reviewed data and missing properties…';
   $('propertyServiceLabel').textContent='First model inference can take a minute';
   try{
-    const [a,b]=await Promise.all([resolveComponent('A'),resolveComponent('B')]);
-    $('systemType').value=a.component_class==='neutral'&&b.component_class==='neutral'?'Type V':a.component_class==='salt'&&b.component_class==='salt'?'Type I':'Type III';
+    const a=await resolveComponent('A'),b=await resolveComponent('B');
+    $('systemType').value=a.component_class==='neutral'&&b.component_class==='neutral'?'neutral-neutral':a.component_class==='salt'&&b.component_class==='salt'?'salt-salt':'salt-neutral';
     button.querySelector('span').textContent='Pure properties completed';$('propertyServiceLabel').textContent='Experimental values used first · missing values modelled';
   }catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');button.querySelector('span').textContent='Complete pure properties from SMILES';$('propertyServiceLabel').textContent='Correct the structure and try again';}
   finally{button.disabled=!propertyServiceReady;}
 }
 async function calculate(){
   $('errorBox').classList.add('hidden');
+  $('calculate').disabled=true;$('calculate').textContent='Calculating…';
   try{
     const tm1=num('tmA'),tm2=num('tmB'),h1=num('hfA'),h2=num('hfB'); if(tm1<=150||tm2<=150||h1<=0||h2<=0)throw new Error('Use positive fusion enthalpies and plausible Kelvin temperatures.');
     const mode=document.querySelector('input[name=activity]:checked').value;
@@ -117,19 +114,22 @@ async function calculate(){
     const physicalMin=valid.reduce((a,b)=>a.t<b.t?a:b); const support=supportSummary(); let min=physicalMin;
     if($('useCorrection').checked){
       if(!modelServiceReady)throw new Error('The frozen B4 model service is not connected.');
-      const response=await fetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemType:$('systemType').value,nameA:$('nameA').value,nameB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,tm1,tm2,h1,h2,points})});
+      if(mode==='ideal')throw new Error('Ideal SLE is a physical fallback, not a validated replacement for the non-ideal features used by B4. Uncheck model prediction, or supply non-ideal inputs.');
+      if(!$('smilesA').value.trim()||!$('smilesB').value.trim())throw new Error('Both SMILES are required for model prediction.');
+      const response=await fetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activityMode:mode,systemType:$('systemType').value,nameA:$('nameA').value,nameB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,tm1,tm2,h1,h2,points})});
       const body=await response.json(); if(!response.ok)throw new Error(body.error||'B4 inference failed.'); body.predictions.forEach((v,i)=>points[i].corrected=v); min=points.filter(p=>Number.isFinite(p.corrected)).reduce((a,b)=>a.corrected<b.corrected?a:b);
     }
     const central=$('useCorrection').checked?min.corrected:min.t;
-    lastResult={created:new Date().toISOString(),method:$('useCorrection').checked?'B4 physics-informed prediction':mode==='ideal'?'ideal SLE':mode==='gamma'?'uploaded activity-coefficient SLE':'COSMO-SAC profile SLE',inputs:{componentA:$('nameA').value,componentB:$('nameB').value,systemType:$('systemType').value,tm1,tm2,h1,h2,propertyProvenance:sourceSummary()},minimum:{temperature_K:central,composition_xA:min.x},calibratedRange:$('useCorrection').checked?{temperature90_K:[central-44.5,central+44.5],composition90:[Math.max(.02,min.x-.256),Math.min(.98,min.x+.256)],coverage:'marginal over comparable unseen pairs'}:null,points};
+    lastResult={created:new Date().toISOString(),method:$('useCorrection').checked?'Exploratory B4 prediction':mode==='ideal'?'ideal SLE':mode==='gamma'?'uploaded activity-coefficient SLE':'simplified COSMO-based SLE',inputs:{componentA:$('nameA').value,componentB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,systemType:$('systemType').value,tm1,tm2,h1,h2,propertyProvenance:sourceSummary()},minimum:{temperature_K:central,composition_xA:min.x},calibratedRange:null,scope:'User-input curve; production profile, applicability and optimized-target deployment checks are not completed by this interface.',points};
     $('minTemp').textContent=`${central.toFixed(1)} K`; $('minX').textContent=min.x.toFixed(2); $('methodLabel').textContent=lastResult.method;
-    if($('useCorrection').checked){$('interval').textContent=`${(central-44.5).toFixed(1)}–${(central+44.5).toFixed(1)} K`;$('intervalNote').textContent='90% marginal calibrated range';$('xRangeNote').textContent=`90% marginal x-range ${Math.max(.02,min.x-.256).toFixed(2)}–${Math.min(.98,min.x+.256).toFixed(2)}`;}else{$('interval').textContent='Not reported';$('intervalNote').textContent='Connect frozen B4 service for calibrated range';$('xRangeNote').textContent='global 0.02–0.98 search';}
+    $('interval').textContent='Not assessed';$('intervalNote').textContent='User-input curves are not yet production-calibrated';$('xRangeNote').textContent='97-point search · mole fraction, not mass fraction';
     $('support').textContent=support[0];$('supportNote').textContent=support[1];$('propertyProv').textContent=sourceSummary();
     $('gammaProv').textContent=mode==='ideal'?'Ideal fallback (γ = 1)':mode==='gamma'?'User-supplied γ(x)':'Uploaded sigma profiles';
-    $('interpretTitle').textContent=$('useCorrection').checked?'B4 prediction with calibrated range':'Physical reference calculated';$('statusDot').style.background='#13a6ad';
-    $('interpretText').textContent=$('useCorrection').checked?`The B4 estimate is ${central.toFixed(1)} K near xA = ${min.x.toFixed(2)}. Its interval is a marginal calibration over comparable unseen pairs—not a 90% guarantee for this individual chemistry and not evidence of DES formation.`:`The estimated physical minimum is ${central.toFixed(1)} K near xA = ${min.x.toFixed(2)}. This is a composition-resolved ${lastResult.method} reference, not yet the calibrated B4 prediction interval and not evidence of DES formation.`;
+    $('interpretTitle').textContent=$('useCorrection').checked?'Exploratory model curve':'Physical reference calculated';$('statusDot').style.background='#13a6ad';
+    $('interpretText').textContent=`The ${lastResult.method} minimum is ${central.toFixed(1)} K near xA = ${min.x.toFixed(2)}. Use the curve to explore composition. Experimental priority and DES formation are not established by this calculation.`;
     draw(points,min);
   }catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');}
+  finally{$('calculate').disabled=false;$('calculate').textContent='Calculate composition curve';}
 }
 function draw(points,min){
   const svg=$('curveChart'),W=760,H=390,m={l:62,r:25,t:30,b:55}; const vals=points.filter(p=>Number.isFinite(p.t)); const yvals=vals.flatMap(p=>Number.isFinite(p.corrected)?[p.t,p.corrected]:[p.t]); let ymin=Math.floor(Math.min(...yvals,250)/20)*20-10,ymax=Math.ceil(Math.max(...yvals,350)/20)*20+10;if(ymax-ymin<80)ymax=ymin+80;
@@ -144,13 +144,13 @@ function draw(points,min){
 function download(name,obj,type='application/json'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([typeof obj==='string'?obj:JSON.stringify(obj,null,2)],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href);}
 function queue(){return JSON.parse(localStorage.getItem('des-update-queue')||'[]');}function updateCount(){$('queueCount').textContent=queue().length;}
 document.querySelectorAll('input[name=activity]').forEach(r=>r.addEventListener('change',()=>{$('gammaPanel').classList.toggle('hidden',r.value!=='gamma'||!r.checked);$('sigmaPanel').classList.toggle('hidden',r.value!=='sigma'||!r.checked);}));
-$('gammaFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const rows=parseCSV(await f.text()).map(r=>({x:Number(r.x),gamma1:Number(r.gamma1),gamma2:Number(r.gamma2)}));if(rows.some(r=>Object.values(r).some(v=>!Number.isFinite(v)))){gammaUpload=null;$('gammaFileName').textContent='Invalid CSV';return;}gammaUpload=rows;$('gammaFileName').textContent=f.name;});
+$('gammaFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const rows=parseCSV(await f.text()).map(r=>({x:Number(r.x),gamma1:Number(r.gamma1),gamma2:Number(r.gamma2)})).sort((a,b)=>a.x-b.x);if(rows.length<2||rows.some((r,i)=>Object.values(r).some(v=>!Number.isFinite(v))||r.x<0||r.x>1||r.gamma1<=0||r.gamma2<=0||(i>0&&r.x===rows[i-1].x))||rows[0].x>.02||rows.at(-1).x<.98){gammaUpload=null;$('gammaFileName').textContent='Use positive γ values, unique x values, and coverage from 0.02 to 0.98.';return;}gammaUpload=rows;$('gammaFileName').textContent=f.name;});
 $('calculate').addEventListener('click',calculate);$('exportResult').addEventListener('click',()=>lastResult?download('des-screening-result.json',lastResult):null);
 $('resolveProperties').addEventListener('click',resolveProperties);
 $('smilesA').addEventListener('input',()=>{propertyResolution.A=null;$('resolveNoteA').textContent='Structure changed; resolve properties again.';$('resolveNoteA').className='resolve-note';});
 $('smilesB').addEventListener('input',()=>{propertyResolution.B=null;$('resolveNoteB').textContent='Structure changed; resolve properties again.';$('resolveNoteB').className='resolve-note';});
-$('loadDemo').addEventListener('click',()=>{Object.entries({nameA:'Illustrative component A',nameB:'Illustrative component B',smilesA:'NC(=O)N',smilesB:'CC(=O)N',tmA:405,tmB:353,hfA:14.5,hfB:12}).forEach(([k,v])=>$(k).value=v);document.querySelector('input[name=activity][value=ideal]').click();calculate();});
+$('loadDemo').addEventListener('click',()=>{Object.entries({nameA:'Illustrative component A',nameB:'Illustrative component B',smilesA:'NC(=O)N',smilesB:'CC(=O)N',tmA:405,tmB:353,hfA:14.5,hfB:12}).forEach(([k,v])=>$(k).value=v);['tmSourceA','hfSourceA','tmSourceB','hfSourceB'].forEach(id=>$(id).value='model');['A','B'].forEach(side=>{propertyResolution[side]=null;$(`resolveNote${side}`).textContent='Demonstration values only — not reviewed measurements.';});$('useCorrection').checked=false;document.querySelector('input[name=activity][value=ideal]').click();calculate();});
 $('saveMeasurement').addEventListener('click',()=>{const value=Number($('measurementValue').value);if(!Number.isFinite(value))return;const q=queue();q.push({created:new Date().toISOString(),type:$('measurementType').value,value,note:$('measurementNote').value,system:lastResult?.inputs||null});localStorage.setItem('des-update-queue',JSON.stringify(q));$('measurementValue').value='';$('measurementNote').value='';updateCount();});
 $('exportQueue').addEventListener('click',()=>download('des-model-update-queue.json',{exported:new Date().toISOString(),policy:'candidate for reviewed periodic release; no online retraining',records:queue()}));
-updateCount();draw([{x:.02,t:390},{x:.2,t:340},{x:.4,t:310},{x:.6,t:315},{x:.8,t:335},{x:.98,t:355}],{x:.4,t:310});
-fetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed components · four frozen models ready`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B4 inference service connected';}).catch(()=>{});
+updateCount();$('curveChart').innerHTML='<text x="380" y="175" text-anchor="middle" font-size="20" fill="#64758a">Your composition curve will appear here</text><text x="380" y="212" text-anchor="middle" font-size="16" fill="#64758a">Load the example to try the calculator</text>';
+fetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';$('connectionStatus').textContent='Local prediction service connected';$('serviceNotice').textContent='Enter two SMILES and complete pure properties, or enter your measured values. Advanced activity inputs are optional for physical curves; model predictions require non-ideal inputs.';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed components · four frozen models ready`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B4 inference service connected';}).catch(()=>{});

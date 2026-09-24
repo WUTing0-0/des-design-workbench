@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import sys
+import math
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -31,6 +32,21 @@ property_resolver = PropertyResolver()
 
 
 def predict(payload: dict) -> list[float]:
+    if payload.get('activityMode') not in {'sigma', 'gamma'}:
+        raise ValueError('B4 requires non-ideal features. Ideal SLE is available as a physical reference only.')
+    from rdkit import Chem
+    for field in ['smilesA', 'smilesB']:
+        if not payload.get(field) or Chem.MolFromSmiles(payload[field]) is None:
+            raise ValueError('Two valid component SMILES are required.')
+    for field in ['tm1', 'tm2', 'h1', 'h2']:
+        if not math.isfinite(float(payload[field])) or float(payload[field]) <= 0:
+            raise ValueError('Pure properties must be finite and positive.')
+    points_in = payload.get('points', [])
+    if not 2 <= len(points_in) <= 2000:
+        raise ValueError('Supply 2–2,000 composition points.')
+    for point in points_in:
+        if not 0 < float(point['x']) < 1 or point.get('t') is None or not math.isfinite(float(point['t'])):
+            raise ValueError('Model inference requires finite physical temperatures at every supplied composition.')
     base = {
         "DES_ID": "user_submission", "System_Type": payload.get("systemType", "Type V"),
         "Component1": payload.get("nameA", "Component A"), "Component2": payload.get("nameB", "Component B"),
@@ -70,7 +86,10 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path not in {"/api/predict", "/api/properties"}:
             return self.send_json(404, {"error": "not found"})
         try:
-            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            size = int(self.headers.get("Content-Length", "0"))
+            if size <= 0 or size > 2_000_000:
+                raise ValueError('Request must contain at most 2 MB of JSON.')
+            payload = json.loads(self.rfile.read(size))
             if self.path == "/api/properties":
                 return self.send_json(200, property_resolver.resolve(
                     payload.get("smiles", ""), payload.get("componentClass")

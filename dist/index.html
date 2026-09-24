@@ -6,7 +6,7 @@
   <meta name="description" content="A transparent composition-resolved eutectic screening workbench." />
   <title>DES Design Workbench</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c2d57'/%3E%3Cpath d='M18 14h28M25 14v15L15 48a5 5 0 004 7h26a5 5 0 004-7L39 29V14' fill='none' stroke='%237fe1dd' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M21 45c7-5 15 5 23-1' fill='none' stroke='%23f1b24a' stroke-width='4'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260925" />
 </head>
 <body>
   <header class="topbar">
@@ -14,10 +14,11 @@
       <div class="brand-mark">Δ</div>
       <div><strong>DES Design Workbench</strong><span>composition-resolved screening</span></div>
     </div>
-    <div class="release"><span></span>Research preview · frozen workflow</div>
+    <div class="release" id="connectionStatus">Browser mode · physical reference</div>
   </header>
 
   <main>
+    <p class="service-notice" id="serviceNotice">Start with <b>Load example</b>, or enter measured properties below. Automatic property lookup and machine learning require the local service. <a href="https://github.com/WUTing0-0/des-design-workbench#run-the-full-local-workflow" target="_blank" rel="noopener">Local setup</a></p>
     <section class="intro-strip">
       <div><b>1</b><span>Define components</span></div>
       <i></i><div><b>2</b><span>Assign pure properties</span></div>
@@ -28,7 +29,7 @@
     <div class="workspace">
       <section class="controls card">
         <div class="section-head">
-          <div><span class="eyebrow">INPUTS</span><h1>Build a binary system</h1></div>
+          <div><h1>Choose two components</h1></div>
           <button class="ghost" id="loadDemo">Load example</button>
         </div>
 
@@ -38,11 +39,11 @@
             <label>SMILES <input id="smilesA" placeholder="e.g. NC(=O)N" /></label>
             <label class="class-field">Component class<select id="classA"><option value="auto">Detect from SMILES</option><option value="neutral">Neutral molecule</option><option value="salt">Salt · cation.anion</option></select></label>
             <div class="property-row">
-              <label>Melting point <span>K</span><input id="tmA" type="number" value="405" step="0.1" /></label>
+              <label>Melting point <span>K</span><input id="tmA" type="number" placeholder="Measured Tm" step="0.1" /></label>
               <select id="tmSourceA" aria-label="Melting point source A"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
             </div>
             <div class="property-row">
-              <label>Fusion enthalpy <span>kJ mol⁻¹</span><input id="hfA" type="number" value="14.5" step="0.1" /></label>
+              <label>Fusion enthalpy <span>kJ mol⁻¹</span><input id="hfA" type="number" placeholder="Measured ΔHfus" step="0.1" /></label>
               <select id="hfSourceA" aria-label="Fusion enthalpy source A"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
             </div>
             <p class="resolve-note" id="resolveNoteA">Enter a structure to query the reviewed property table.</p>
@@ -53,11 +54,11 @@
             <label>SMILES <input id="smilesB" placeholder="e.g. CC(=O)N" /></label>
             <label class="class-field">Component class<select id="classB"><option value="auto">Detect from SMILES</option><option value="neutral">Neutral molecule</option><option value="salt">Salt · cation.anion</option></select></label>
             <div class="property-row">
-              <label>Melting point <span>K</span><input id="tmB" type="number" value="353" step="0.1" /></label>
+              <label>Melting point <span>K</span><input id="tmB" type="number" placeholder="Measured Tm" step="0.1" /></label>
               <select id="tmSourceB" aria-label="Melting point source B"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
             </div>
             <div class="property-row">
-              <label>Fusion enthalpy <span>kJ mol⁻¹</span><input id="hfB" type="number" value="12.0" step="0.1" /></label>
+              <label>Fusion enthalpy <span>kJ mol⁻¹</span><input id="hfB" type="number" placeholder="Measured ΔHfus" step="0.1" /></label>
               <select id="hfSourceB" aria-label="Fusion enthalpy source B"><option value="experimental">Experimental</option><option value="model">Model estimate</option></select>
             </div>
             <p class="resolve-note" id="resolveNoteB">Enter a structure to query the reviewed property table.</p>
@@ -68,12 +69,13 @@
           <small id="propertyServiceLabel">Requires the local model service</small>
         </button>
 
+        <details class="advanced"><summary>Activity coefficients and model options <span>Optional · ideal by default</span></summary>
         <div class="activity-block">
           <div class="block-title"><div><span class="eyebrow">LIQUID NON-IDEALITY</span><h2>Activity-coefficient route</h2></div><span class="help">evaluated at 298.15 K</span></div>
           <div class="segmented" role="radiogroup">
             <label><input type="radio" name="activity" value="ideal" checked /><span><b>Ideal</b><small>γ₁ = γ₂ = 1</small></span></label>
             <label><input type="radio" name="activity" value="gamma" /><span><b>Upload γ(x)</b><small>CSV: x, gamma1, gamma2</small></span></label>
-            <label><input type="radio" name="activity" value="sigma" /><span><b>Sigma profiles</b><small>calculate COSMO-SAC γ(x)</small></span></label>
+            <label><input type="radio" name="activity" value="sigma" /><span><b>Sigma profiles</b><small>simplified COSMO-based γ(x)</small></span></label>
           </div>
           <div id="gammaPanel" class="upload-panel hidden">
             <label class="drop">Activity curve CSV<input id="gammaFile" type="file" accept=".csv,text/csv" /><span id="gammaFileName">Choose file</span></label>
@@ -93,10 +95,11 @@
 
         <div class="model-block">
           <div><span class="eyebrow">PREDICTION LAYER</span><h2>Physics reference + frozen correction</h2></div>
-          <label class="system-type">Mixture class<select id="systemType"><option value="Type V">Type V · neutral–neutral</option><option value="Type III">Type III · salt–neutral</option><option value="Type I">Type I · salt–salt / metal salt</option><option value="Type IV">Type IV · hydrated metal salt</option></select></label>
+          <label class="system-type">Input class<select id="systemType"><option value="neutral-neutral">Neutral–neutral</option><option value="salt-neutral">Salt–neutral</option><option value="salt-salt">Salt–salt</option></select></label>
           <label class="switch-row"><input id="useCorrection" type="checkbox" disabled /><span><b>B4 model correction</b><small>Available when the local inference service is connected</small></span><em>offline</em></label>
-          <p class="method-note">The public browser calculation never invents a correction. Without the frozen model service, results remain an explicitly labelled SLE reference.</p>
+          <p class="method-note">User-supplied activity inputs are exploratory. They are not automatically equivalent to the paper's frozen profiles and calibration.</p>
         </div>
+        </details>
 
         <button class="primary" id="calculate">Calculate composition curve</button>
         <div id="errorBox" class="error hidden" role="alert"></div>
@@ -104,14 +107,14 @@
 
       <section class="results card">
         <div class="section-head result-head">
-          <div><span class="eyebrow">RESULT</span><h1>Composition-resolved estimate</h1></div>
+          <div><h1>Temperature across composition</h1></div>
           <button class="ghost" id="exportResult">Export result</button>
         </div>
 
         <div class="result-summary">
           <div class="metric featured"><span>Estimated minimum</span><strong id="minTemp">—</strong><small id="methodLabel">Run a calculation</small></div>
           <div class="metric"><span>Composition x<sub>A</sub></span><strong id="minX">—</strong><small id="xRangeNote">global 0.02–0.98 search</small></div>
-          <div class="metric"><span>Reported range</span><strong id="interval">Not available</strong><small id="intervalNote">Requires calibrated B4 inference</small></div>
+          <div class="metric"><span>Validated prediction range</span><strong id="interval">Not assessed</strong><small id="intervalNote">No interval without verified deployment checks</small></div>
           <div class="metric"><span>Support</span><strong id="support">Input check</strong><small id="supportNote">provenance-aware, not a probability</small></div>
         </div>
 
@@ -133,7 +136,7 @@
       </section>
     </div>
 
-    <section class="feedback card">
+    <details class="feedback card"><summary>Record an experimental measurement <span>Optional · stored on this device</span></summary><section>
       <div class="feedback-copy"><span class="eyebrow">CLOSED-LOOP UPDATE</span><h2>Add a measured value without silently changing the model</h2><p>Measurements are stored locally as a versioned contribution record. They can be exported for review and included in a scheduled six- or twelve-month model release; this preview never retrains the published model online.</p></div>
       <div class="feedback-form">
         <select id="measurementType"><option>Melting point</option><option>Fusion enthalpy</option><option>Mixture temperature at composition</option></select>
@@ -142,10 +145,10 @@
         <button id="saveMeasurement">Add to update queue</button>
         <button class="ghost" id="exportQueue">Export queue (<span id="queueCount">0</span>)</button>
       </div>
-    </section>
+    </section></details>
   </main>
 
   <footer><span>Screening support—not evidence of DES formation, safety or phase stability.</span><span>Versioned calculations · explicit provenance · exportable records</span></footer>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260925"></script>
 </body>
 </html>

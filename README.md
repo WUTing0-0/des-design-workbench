@@ -1,8 +1,8 @@
 # DES Design Workbench
 
-A provenance-aware interface for composition-resolved deep-eutectic-solvent screening. The complete local workflow is:
+A provenance-aware interface for exploring binary liquidus predictions. The currently implemented local calculation is:
 
-`SMILES → reviewed property lookup → missing-property inference → SLE/COSMO-SAC → frozen B4 correction → calibrated range`
+`SMILES → reviewed property lookup → missing-property inference → SLE/reference curve → optional exploratory B4 prediction`
 
 ## What the interface does
 
@@ -15,11 +15,15 @@ A provenance-aware interface for composition-resolved deep-eutectic-solvent scre
    - salt fusion enthalpy: TabPFN.
 4. Calculates the binary hard-max SLE curve from `x = 0.02–0.98` using either ideal activity coefficients, a user-supplied `gamma(x)` table, or two sigma profiles.
 5. Applies the frozen B4 phase-equilibrium model when the local service is available.
-6. Reports a calibrated marginal range, provenance and model limitations instead of presenting a point estimate as exact.
+6. Reports the curve and input provenance. Formal applicability and optimized-target interval deployment are not yet integrated for arbitrary user inputs; the interface explicitly says **Not assessed** instead of applying an obsolete pooled interval.
 
 The hosted static preview performs the physical browser calculation. Full property inference and B4 correction run locally because the frozen scientific models, reviewed database and third-party foundation weights are not embedded in the public website.
 
 ## Run the full local workflow
+
+For a quick browser demonstration, click **Load example**, then inspect the composition curve. Example inputs are illustrative, not reviewed experimental measurements. For your own system, enter four measured properties, or start the local service to resolve missing values from SMILES. Activity inputs and optional model settings are collapsed under **Activity coefficients and model options**. Pure physical prediction remains available without a model server.
+
+The browser uses a simplified COSMO-based electrostatic/size–shape implementation when sigma profiles are supplied; it does not implement every standard COSMO-SAC variant. Ideal gamma = 1 is a physical fallback only, not a validated replacement for the non-ideal features of the trained B4 model. The server rejects that substitution.
 
 Create a Python environment compatible with `requirements-local.txt`. The tested Windows environment uses Python 3.12, PyTorch 2.6 CPU, RDKit 2026.03.4, scikit-learn 1.5.2 and the TabPFN 7.1.1 runtime with the frozen v2.6 regression checkpoint. Then set these optional paths if your release is not stored in the defaults:
 
@@ -48,7 +52,7 @@ The repository intentionally excludes raw licensed datasets, pretrained foundati
 
 - Experimental pure-component values are used only after identity, units, solid form and transition meaning have been reviewed.
 - Model MAEs are population-level reference errors, not molecule-specific confidence probabilities.
-- The reported B4 temperature/composition ranges are marginally calibrated over comparable unseen pairs; they are not 90% guarantees for an individual chemistry.
+- User-input B4 outputs are exploratory. Manuscript-calibrated ranges must not be applied until profile identity, input regime, numerical eligibility and production applicability have been checked. The website does not yet perform that complete deployment check.
 - A low predicted liquidus temperature is not evidence of DES formation, novelty, safety, single-phase stability or experimental reproducibility.
 - Submitted measurements enter a review queue. The published model is updated only in a new versioned release; it is never retrained silently online.
 
