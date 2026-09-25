@@ -21,27 +21,55 @@ PROJECT = Path(os.environ.get("DES_PROJECT_ROOT", r"C:\code2026")).resolve()
 MODULE_PATH = RELEASE / "77_salt_tm_role_context_propagation_v1" / "run_dense_grid_chunk_v76.py"
 PACK_PATH = RELEASE / "77_salt_tm_role_context_propagation_v1" / "benchmark_model" / "FULL_CANONICAL_B4_B5_PACK.joblib"
 B3_PACK_PATH = RELEASE / "77_salt_tm_role_context_propagation_v1" / "benchmark_model" / "FULL_CANONICAL_B3_PACK.joblib"
+FULL_RESEARCH_MODE = MODULE_PATH.exists() and PACK_PATH.exists() and B3_PACK_PATH.exists()
+
+if not FULL_RESEARCH_MODE:
+    PACK_PATH = ROOT / "runtime_models" / "FULL_CANONICAL_B4_B5_PACK.joblib"
+    B3_PACK_PATH = ROOT / "runtime_models" / "FULL_CANONICAL_B3_PACK.joblib"
 
 os.environ.setdefault("DES_WORKFLOW_ROOT", str(RELEASE))
 os.environ.setdefault("DES_PROJECT_ROOT", str(PROJECT))
-spec = importlib.util.spec_from_file_location("des_dense_grid", MODULE_PATH)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
+if FULL_RESEARCH_MODE:
+    spec = importlib.util.spec_from_file_location("des_dense_grid", MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+else:
+    from portable_runtime import portable_phase as module
 pack = joblib.load(PACK_PATH)
 b3_pack = joblib.load(B3_PACK_PATH)
 property_resolver = PropertyResolver()
-runner = module.load_runner()
-profile_loader, profile_cache = module.build_profile_loader(runner)
-profile_coverage = pd.read_csv(module.COVERAGE)
-profile_coverage = profile_coverage[
-    profile_coverage.matched.astype(str).str.lower().isin(["true", "1", "yes"])
-].copy()
-profile_component_count = profile_coverage.component_smiles.map(module.canonical_smiles).nunique()
+if FULL_RESEARCH_MODE:
+    runner = module.load_runner()
+    profile_loader, profile_cache = module.build_profile_loader(runner)
+    profile_coverage = pd.read_csv(module.COVERAGE)
+    profile_coverage = profile_coverage[
+        profile_coverage.matched.astype(str).str.lower().isin(["true", "1", "yes"])
+    ].copy()
+    profile_component_count = profile_coverage.component_smiles.map(module.canonical_smiles).nunique()
+    portable_profiles = {}
+else:
+    example = json.loads((ROOT / "examples" / "thymol_octanoic_acid" / "example.json").read_text(encoding="utf-8"))
+    portable_profiles = {module.canonical_smiles(c["smiles"]): c for c in example["components"]}
+    profile_component_count = len(portable_profiles)
 
 
 def profile_lookup(name: str | None, smiles: str) -> dict:
     canonical = module.canonical_smiles(smiles)
+    if not FULL_RESEARCH_MODE:
+        item = portable_profiles.get(canonical)
+        if item is None:
+            return {"available": False, "canonical_smiles": canonical}
+        profile = item["profile"]
+        return {
+            "available": True,
+            "canonical_smiles": canonical,
+            "profile_name": profile["name"],
+            "sigma": profile["sigma"],
+            "p_sigma": profile["p_sigma"],
+            "area": profile["area_A2"],
+            "volume": profile["volume_A3"],
+        }
     try:
         profile = profile_loader(name or canonical, canonical)
     except (FileNotFoundError, KeyError, ValueError):
@@ -119,9 +147,10 @@ class Handler(SimpleHTTPRequestHandler):
                 "models": {"ideal": "frozen B3 direct", "nonideal": "frozen B4 direct"},
                 "properties": property_resolver.ready_summary,
                 "profiles": {
-                    "status": "ready", "matched_records": len(profile_coverage),
+                    "status": "ready", "matched_records": (len(profile_coverage) if FULL_RESEARCH_MODE else len(portable_profiles)),
                     "unique_components": int(profile_component_count),
                 },
+                "distribution": "full research installation" if FULL_RESEARCH_MODE else "portable validated example",
             })
         return super().do_GET()
 

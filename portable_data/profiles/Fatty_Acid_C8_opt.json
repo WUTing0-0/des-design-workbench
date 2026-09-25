@@ -1,0 +1,13 @@
+{
+  "source_cpcm": "D:\\DES_Project\\Neutral_Molecules\\orca_outputs\\Fatty_Acid_C8_opt.cpcm",
+  "n_surface_rows_used": 1452,
+  "volume_bohr3": 1366.107275041,
+  "volume_ang3": 202.43621212457143,
+  "area_bohr2": 797.698772616,
+  "area_ang2": 223.37840693478722,
+  "area_ang2_total": 223.37758699083778,
+  "sigma_grid_min": -0.025,
+  "sigma_grid_max": 0.025,
+  "sigma_grid_n": 51,
+  "note": "Generated from ORCA .cpcm using sigma=surface_charge/area_ang2."
+}

@@ -61,6 +61,9 @@ def salt_parts(canonical: str) -> tuple[str, str] | None:
 class PropertyResolver:
     def __init__(self):
         master_path = P77 / "property_master" / "PURE_PROPERTY_MASTER_EXPERIMENT_FIRST.csv"
+        self.portable = not master_path.exists()
+        if self.portable:
+            master_path = Path(__file__).resolve().parent / "portable_data" / "reviewed_property_examples.csv"
         self.master = pd.read_csv(master_path)
         self.master["canonical_key"] = self.master.component_canonical.map(canonicalize)
         self.lookup = {row.canonical_key: row for row in self.master.itertuples(index=False)}
@@ -80,6 +83,7 @@ class PropertyResolver:
         return {
             "status": "ready",
             "database_rows": len(self.master),
+            "distribution": "portable example library" if self.portable else "full reviewed research library",
             "policy": "experiment-first; model only when missing",
             "models": {
                 "neutral_tm": "four-layer GIN, MAE 22.08 K",
@@ -272,6 +276,11 @@ class PropertyResolver:
                     value, origin = float(getattr(record, final_col)), "model"
                     model = METRICS[component_class][prop][1]
                 else:
+                    if self.portable:
+                        raise ValueError(
+                            "This compound is not in the portable reviewed example library. "
+                            "Enter measured pure properties manually, or install the separately licensed full model bundle."
+                        )
                     value = float(self._model_value(component_class, prop, canonical, parts))
                     origin, model = "model", METRICS[component_class][prop][1]
                 mae = None if origin == "experimental" else METRICS[component_class][prop][0]

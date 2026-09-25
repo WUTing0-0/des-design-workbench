@@ -177,7 +177,27 @@ $('predictMissing').addEventListener('click',predictMissing);
 function invalidateLookup(side){propertyResolution[side]=null;librarySigmaA=librarySigmaB=null;$(`tm${side}`).value='';$(`hf${side}`).value='';$(`tmSource${side}`).value='experimental';$(`hfSource${side}`).value='experimental';$('libraryActivityOption').classList.add('hidden');$('missingChoice').classList.add('hidden');$(`resolveNote${side}`).textContent='Structure changed; search the libraries again.';$(`resolveNote${side}`).className='resolve-note';$('profileStatus').textContent='Activity profiles will be checked after both structures are searched.';$('profileStatus').className='profile-status';}
 $('smilesA').addEventListener('input',()=>invalidateLookup('A'));
 $('smilesB').addEventListener('input',()=>invalidateLookup('B'));
-$('loadDemo').addEventListener('click',()=>{Object.entries({nameA:'Illustrative component A',nameB:'Illustrative component B',smilesA:'NC(=O)N',smilesB:'CC(=O)N',tmA:405,tmB:353,hfA:14.5,hfB:12}).forEach(([k,v])=>$(k).value=v);['tmSourceA','hfSourceA','tmSourceB','hfSourceB'].forEach(id=>$(id).value='model');['A','B'].forEach(side=>{propertyResolution[side]=null;$(`resolveNote${side}`).textContent='Demonstration values only — not reviewed measurements.';});$('useCorrection').checked=false;document.querySelector('input[name=activity][value=ideal]').click();calculate();});
+$('loadDemo').addEventListener('click',async()=>{
+  $('errorBox').classList.add('hidden');
+  try{
+    const example=await fetch('examples/thymol_octanoic_acid.json').then(r=>{if(!r.ok)throw new Error('The bundled example could not be loaded.');return r.json();});
+    const [a,b]=example.components;
+    Object.entries({nameA:a.name,nameB:b.name,smilesA:a.smiles,smilesB:b.smiles,tmA:a.properties.tm_K,tmB:b.properties.tm_K,hfA:a.properties.hfus_kJ_mol,hfB:b.properties.hfus_kJ_mol}).forEach(([k,v])=>$(k).value=v);
+    ['tmSourceA','hfSourceA','tmSourceB','hfSourceB'].forEach(id=>$(id).value='experimental');
+    librarySigmaA={sigma:a.profile.sigma,p:a.profile.p_sigma,area:a.profile.area_A2,volume:a.profile.volume_A3};
+    librarySigmaB={sigma:b.profile.sigma,p:b.profile.p_sigma,area:b.profile.area_A2,volume:b.profile.volume_A3};
+    $('libraryActivityOption').classList.remove('hidden');
+    document.querySelector('input[name=activity][value=library]').click();
+    $('systemType').value='neutral-neutral';
+    $('resolveNoteA').textContent=`Reviewed experiment · Tm ${a.properties.tm_K.toFixed(2)} K · ΔHfus ${a.properties.hfus_kJ_mol.toFixed(3)} kJ mol⁻¹`;
+    $('resolveNoteB').textContent=`Reviewed experiment · Tm ${b.properties.tm_K.toFixed(2)} K · ΔHfus ${b.properties.hfus_kJ_mol.toFixed(3)} kJ mol⁻¹`;
+    ['A','B'].forEach(side=>$(`resolveNote${side}`).className='resolve-note resolved');
+    $('profileStatus').textContent='Bundled computed σ-profiles loaded. Canonical 10-point pair-disjoint B4 MAE: 2.47 K; maximum absolute error: 5.85 K.';
+    $('profileStatus').className='profile-status ready';
+    $('useCorrection').checked=modelServiceReady;
+    await calculate();
+  }catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');}
+});
 $('saveMeasurement').addEventListener('click',()=>{const value=Number($('measurementValue').value);if(!Number.isFinite(value))return;const q=queue();q.push({created:new Date().toISOString(),type:$('measurementType').value,value,note:$('measurementNote').value,system:lastResult?.inputs||null});localStorage.setItem('des-update-queue',JSON.stringify(q));$('measurementValue').value='';$('measurementNote').value='';updateCount();});
 $('exportQueue').addEventListener('click',()=>download('des-model-update-queue.json',{exported:new Date().toISOString(),policy:'candidate for reviewed periodic release; no online retraining',records:queue()}));
 updateCount();$('curveChart').innerHTML='<text x="380" y="175" text-anchor="middle" font-size="20" fill="#64758a">Your composition curve will appear here</text><text x="380" y="212" text-anchor="middle" font-size="16" fill="#64758a">Load the example to try the calculator</text>';

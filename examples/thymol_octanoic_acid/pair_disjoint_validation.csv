@@ -1,0 +1,11 @@
+source_row,canonical_pair,fold,model,observed_K,predicted_K,absolute_error_K
+2392,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,302.51,301.32581146413656,1.1841885358634272
+2403,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,318.49,319.1900894260722,0.700089426072168
+2417,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,312.05,311.79427016570367,0.2557298342963463
+2422,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,296.95,291.09947260984575,5.850527390154241
+2424,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,275.0,277.4247745616538,2.4247745616538054
+2428,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,280.16,280.0817231395308,0.07827686046920235
+2431,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,275.45,277.5276070021063,2.0776070021063333
+2432,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,274.98,280.50503946534457,5.525039465344548
+2443,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,284.16,278.9197692864107,5.2402307135893125
+2458,smi:CCCCCCCC(=O)O||smi:Cc1ccc(C(C)C)c(O)c1,0,B4_direct_plus_nonideal,285.13,283.7672103644549,1.3627896355450844

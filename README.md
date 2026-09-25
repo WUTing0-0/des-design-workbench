@@ -21,7 +21,7 @@ The hosted interface performs physical browser calculations and automatically co
 
 ## Run the full local workflow
 
-For a quick browser demonstration, click **Load example**, then inspect the composition curve. Example inputs are illustrative, not reviewed experimental measurements. For your own system, enter four measured properties, or start the local service to resolve missing values from SMILES. Activity inputs and optional model settings are collapsed under **Activity coefficients and model options**. Pure physical prediction remains available without a model server.
+For a quick demonstration, click **Load validated example**. The bundled thymol–octanoic-acid case contains four reviewed experimental pure properties and two computed sigma profiles. Its canonical ten-point pair-disjoint subset has B4 MAE 2.47 K (maximum absolute error 5.85 K); this is pair-specific held-out evidence, not a global accuracy claim. For your own system, enter four measured properties or use the full research installation to resolve missing values from SMILES.
 
 The browser uses the workflow's simplified COSMO-based electrostatic/size–shape implementation when sigma profiles are supplied; it does not implement every standard COSMO-SAC variant. Ideal `gamma = 1` is corrected with B3, whose inputs are structure, composition, pure properties and ideal-SLE features. It is not mislabeled as B4, because B4 additionally requires non-ideal features.
 
@@ -40,6 +40,10 @@ The first unseen-molecule inference is slow on CPU because the molecular encoder
 ## Required private/release artifacts
 
 The repository intentionally excludes raw licensed datasets, pretrained foundation checkpoints and frozen model binaries. `MODEL_MANIFEST.json` records their expected release-relative locations, reference metrics and SHA-256 hashes. Publication archives should supply these artifacts through the paper data repository, subject to their original licenses.
+
+## Portable download
+
+`release_assets/DES_Design_Workbench_Portable_v0.2.0.zip` is built as a standalone local package. It does not depend on ChatGPT: users unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The archive includes the validated example and frozen B3/B4 phase-equilibrium models. Third-party molecular foundation models are deliberately not redistributed; outside the bundled reviewed example, users can supply measured pure properties and activity inputs manually. See `PORTABLE_README_CN.md`.
 
 ## Input formats
 
