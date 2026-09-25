@@ -6,7 +6,7 @@
   <meta name="description" content="A transparent composition-resolved eutectic screening workbench." />
   <title>DES Design Workbench</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c2d57'/%3E%3Cpath d='M18 14h28M25 14v15L15 48a5 5 0 004 7h26a5 5 0 004-7L39 29V14' fill='none' stroke='%237fe1dd' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M21 45c7-5 15 5 23-1' fill='none' stroke='%23f1b24a' stroke-width='4'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles.css?v=20260925" />
+  <link rel="stylesheet" href="styles.css?v=20260925b" />
 </head>
 <body>
   <header class="topbar">
@@ -65,15 +65,21 @@
           </article>
         </div>
         <button class="property-action" id="resolveProperties" disabled>
-          <span>Complete pure properties from SMILES</span>
-          <small id="propertyServiceLabel">Requires the local model service</small>
+          <span>Search reviewed property and profile libraries</span>
+          <small id="propertyServiceLabel">Requires the local library service</small>
         </button>
+        <div class="choice-panel hidden" id="missingChoice">
+          <div><b>Some inputs are not in the reviewed library</b><span>Enter measured values yourself, or explicitly ask the frozen property models to fill only the missing fields.</span></div>
+          <button type="button" id="predictMissing">Predict missing properties</button>
+        </div>
+        <p class="profile-status" id="profileStatus">Activity profiles will be checked after both structures are searched.</p>
 
-        <details class="advanced"><summary>Activity coefficients and model options <span>Optional · ideal by default</span></summary>
+        <details class="advanced"><summary>Activity coefficients and model options <span>Library profiles are used when both are available; otherwise you choose.</span></summary>
         <div class="activity-block">
           <div class="block-title"><div><span class="eyebrow">LIQUID NON-IDEALITY</span><h2>Activity-coefficient route</h2></div><span class="help">evaluated at 298.15 K</span></div>
           <div class="segmented" role="radiogroup">
-            <label><input type="radio" name="activity" value="ideal" checked /><span><b>Ideal</b><small>γ₁ = γ₂ = 1</small></span></label>
+            <label id="libraryActivityOption" class="hidden"><input type="radio" name="activity" value="library" /><span><b>Library profiles</b><small>matched σ-profiles</small></span></label>
+            <label><input type="radio" name="activity" value="ideal" /><span><b>Ideal + correction</b><small>γ₁ = γ₂ = 1 · B3 available</small></span></label>
             <label><input type="radio" name="activity" value="gamma" /><span><b>Upload γ(x)</b><small>CSV: x, gamma1, gamma2</small></span></label>
             <label><input type="radio" name="activity" value="sigma" /><span><b>Sigma profiles</b><small>simplified COSMO-based γ(x)</small></span></label>
           </div>
@@ -96,7 +102,7 @@
         <div class="model-block">
           <div><span class="eyebrow">PREDICTION LAYER</span><h2>Physics reference + frozen correction</h2></div>
           <label class="system-type">Input class<select id="systemType"><option value="neutral-neutral">Neutral–neutral</option><option value="salt-neutral">Salt–neutral</option><option value="salt-salt">Salt–salt</option></select></label>
-          <label class="switch-row"><input id="useCorrection" type="checkbox" disabled /><span><b>B4 model correction</b><small>Available when the local inference service is connected</small></span><em>offline</em></label>
+          <label class="switch-row"><input id="useCorrection" type="checkbox" disabled /><span><b id="correctionName">Frozen model correction</b><small id="correctionDescription">B3 for ideal SLE; B4 for non-ideal SLE</small></span><em>offline</em></label>
           <p class="method-note">User-supplied activity inputs are exploratory. They are not automatically equivalent to the paper's frozen profiles and calibration.</p>
         </div>
         </details>
@@ -149,6 +155,6 @@
   </main>
 
   <footer><span>Screening support—not evidence of DES formation, safety or phase stability.</span><span>Versioned calculations · explicit provenance · exportable records</span></footer>
-  <script src="app.js?v=20260925"></script>
+  <script src="app.js?v=20260925b"></script>
 </body>
 </html>

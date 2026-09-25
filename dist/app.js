@@ -1,8 +1,11 @@
 const R = 8.31446261815324;
 const $ = (id) => document.getElementById(id);
+const LOCAL_API = location.hostname.endsWith('chatgpt.site') ? 'http://127.0.0.1:4173' : '';
+const apiFetch = (path,options) => fetch(`${LOCAL_API}${path}`,options);
 let lastResult = null;
 let gammaUpload = null;
 let sigmaA = null, sigmaB = null;
+let librarySigmaA = null, librarySigmaB = null;
 let modelServiceReady = false;
 let propertyServiceReady = false;
 const propertyResolution = {A:null,B:null};
@@ -64,67 +67,87 @@ function supportSummary(){
 }
 function propertyLine(result){
   const tm=result.properties.tm,hf=result.properties.hfus;
-  const fmt=(p,label)=>p.origin==='experimental'?`${label}: reviewed experiment`:`${label}: ${p.model} (reference MAE ${p.reference_mae.toFixed(2)} ${p.unit})`;
+  const fmt=(p,label)=>p.origin==='experimental'?`${label}: reviewed experiment`:p.origin==='model'?`${label}: ${p.model} (reference MAE ${p.reference_mae.toFixed(2)} ${p.unit})`:`${label}: not found`;
   return `${result.matched_database?'Database match':'New structure'} · ${fmt(tm,'Tm')} · ${fmt(hf,'ΔHfus')}`;
 }
-async function resolveComponent(side){
+async function resolveComponent(side,action='lookup'){
   const smiles=$(`smiles${side}`).value.trim();
   if(!smiles)throw new Error(`Enter the SMILES for component ${side}.`);
   const selected=$(`class${side}`).value;
-  const response=await fetch('/api/properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({smiles,componentClass:selected==='auto'?null:selected})});
+  const response=await apiFetch('/api/properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({smiles,componentClass:selected==='auto'?null:selected,action})});
   const result=await response.json();if(!response.ok)throw new Error(`Component ${side}: ${result.error||'property resolution failed'}`);
   propertyResolution[side]=result;
   $(`smiles${side}`).value=result.canonical_smiles;
   $(`class${side}`).value=result.component_class;
   if(result.name&&$(`name${side}`).value.match(/^Component [AB]$/))$(`name${side}`).value=result.name;
-  $(`tm${side}`).value=result.properties.tm.value.toFixed(2);
-  $(`hf${side}`).value=result.properties.hfus.value.toFixed(3);
-  $(`tmSource${side}`).value=result.properties.tm.origin;
-  $(`hfSource${side}`).value=result.properties.hfus.origin;
+  if(result.properties.tm.value!==null){$(`tm${side}`).value=result.properties.tm.value.toFixed(2);$(`tmSource${side}`).value=result.properties.tm.origin;}
+  if(result.properties.hfus.value!==null){$(`hf${side}`).value=result.properties.hfus.value.toFixed(3);$(`hfSource${side}`).value=result.properties.hfus.origin;}
   const note=$(`resolveNote${side}`);note.textContent=propertyLine(result);note.className=`resolve-note ${result.warning?'warning':'resolved'}`;
   return result;
 }
 async function resolveProperties(){
   const button=$('resolveProperties');$('errorBox').classList.add('hidden');button.disabled=true;
-  button.querySelector('span').textContent='Resolving reviewed data and missing properties…';
-  $('propertyServiceLabel').textContent='First model inference can take a minute';
+  button.querySelector('span').textContent='Searching reviewed libraries…';
+  $('propertyServiceLabel').textContent='No predicted value is inserted during this search';
   try{
-    const a=await resolveComponent('A'),b=await resolveComponent('B');
+    const a=await resolveComponent('A','lookup'),b=await resolveComponent('B','lookup');
     $('systemType').value=a.component_class==='neutral'&&b.component_class==='neutral'?'neutral-neutral':a.component_class==='salt'&&b.component_class==='salt'?'salt-salt':'salt-neutral';
-    button.querySelector('span').textContent='Pure properties completed';$('propertyServiceLabel').textContent='Experimental values used first · missing values modelled';
-  }catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');button.querySelector('span').textContent='Complete pure properties from SMILES';$('propertyServiceLabel').textContent='Correct the structure and try again';}
+    const missing=[a,b].some(x=>x.requires_user_choice);$('missingChoice').classList.toggle('hidden',!missing);
+    button.querySelector('span').textContent='Search reviewed property and profile libraries';
+    $('propertyServiceLabel').textContent=missing?'Missing inputs await your choice':'All four pure properties found as reviewed experiments';
+    if(a.profile.available&&b.profile.available){
+      librarySigmaA={sigma:a.profile.sigma,p:a.profile.p_sigma,area:a.profile.area,volume:a.profile.volume};
+      librarySigmaB={sigma:b.profile.sigma,p:b.profile.p_sigma,area:b.profile.area,volume:b.profile.volume};
+      $('libraryActivityOption').classList.remove('hidden');document.querySelector('input[name=activity][value=library]').click();
+      $('profileStatus').textContent=`Matched profiles: ${a.profile.profile_name} + ${b.profile.profile_name}. Library activity coefficients selected.`;$('profileStatus').className='profile-status ready';
+    }else{
+      librarySigmaA=librarySigmaB=null;$('libraryActivityOption').classList.add('hidden');
+      const available=[a.profile.available?'A':null,b.profile.available?'B':null].filter(Boolean).join(' and ')||'neither component';
+      $('profileStatus').textContent=`A complete profile pair was not found (${available} available). Choose ideal γ = 1, upload γ(x), or upload both σ-profiles.`;$('profileStatus').className='profile-status choice';
+      const selected=document.querySelector('input[name=activity]:checked');if(selected&&selected.value==='library')selected.checked=false;
+    }
+  }catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');button.querySelector('span').textContent='Search reviewed property and profile libraries';$('propertyServiceLabel').textContent='Correct the structure and try again';}
   finally{button.disabled=!propertyServiceReady;}
+}
+async function predictMissing(){
+  const button=$('predictMissing');button.disabled=true;$('errorBox').classList.add('hidden');
+  try{await resolveComponent('A','complete');await resolveComponent('B','complete');$('missingChoice').classList.add('hidden');$('propertyServiceLabel').textContent='Reviewed experiments retained; missing values filled by frozen models';}
+  catch(e){$('errorBox').textContent=e.message;$('errorBox').classList.remove('hidden');}
+  finally{button.disabled=false;}
 }
 async function calculate(){
   $('errorBox').classList.add('hidden');
   $('calculate').disabled=true;$('calculate').textContent='Calculating…';
   try{
     const tm1=num('tmA'),tm2=num('tmB'),h1=num('hfA'),h2=num('hfB'); if(tm1<=150||tm2<=150||h1<=0||h2<=0)throw new Error('Use positive fusion enthalpies and plausible Kelvin temperatures.');
-    const mode=document.querySelector('input[name=activity]:checked').value;
+    const selectedActivity=document.querySelector('input[name=activity]:checked');if(!selectedActivity)throw new Error('Choose an activity-coefficient route. Library profiles are selected automatically only when both components are available.');
+    const mode=selectedActivity.value;
     if(mode==='sigma'){sigmaA=await fileProfile($('sigmaFileA').files[0],num('areaA'),num('volA'));sigmaB=await fileProfile($('sigmaFileB').files[0],num('areaB'),num('volB'));}
+    if(mode==='library'){if(!librarySigmaA||!librarySigmaB)throw new Error('Search the libraries again or choose another activity-coefficient route.');sigmaA=librarySigmaA;sigmaB=librarySigmaB;}
     const points=[];
     for(let k=2;k<=98;k++){
       const x=k/100; let g=[1,1];
       if(mode==='gamma'){if(!gammaUpload)throw new Error('Upload a γ(x) CSV first.');g=[interp(gammaUpload,x,'gamma1'),interp(gammaUpload,x,'gamma2')];}
-      if(mode==='sigma')g=sigmaGamma(sigmaA,sigmaB,x);
+      if(mode==='sigma'||mode==='library')g=sigmaGamma(sigmaA,sigmaB,x);
       const b1=branch(x,g[0],tm1,h1),b2=branch(1-x,g[1],tm2,h2); const t=Number.isFinite(b1)&&Number.isFinite(b2)?Math.max(b1,b2):Number.isFinite(b1)?b1:b2;
       points.push({x,t,b1,b2,gamma1:g[0],gamma2:g[1]});
     }
     const valid=points.filter(p=>Number.isFinite(p.t)); if(!valid.length)throw new Error('No finite liquidus curve was obtained for these inputs.');
     const physicalMin=valid.reduce((a,b)=>a.t<b.t?a:b); const support=supportSummary(); let min=physicalMin;
     if($('useCorrection').checked){
-      if(!modelServiceReady)throw new Error('The frozen B4 model service is not connected.');
-      if(mode==='ideal')throw new Error('Ideal SLE is a physical fallback, not a validated replacement for the non-ideal features used by B4. Uncheck model prediction, or supply non-ideal inputs.');
+      if(!modelServiceReady)throw new Error('The frozen B3/B4 model service is not connected.');
       if(!$('smilesA').value.trim()||!$('smilesB').value.trim())throw new Error('Both SMILES are required for model prediction.');
-      const response=await fetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activityMode:mode,systemType:$('systemType').value,nameA:$('nameA').value,nameB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,tm1,tm2,h1,h2,points})});
-      const body=await response.json(); if(!response.ok)throw new Error(body.error||'B4 inference failed.'); body.predictions.forEach((v,i)=>points[i].corrected=v); min=points.filter(p=>Number.isFinite(p.corrected)).reduce((a,b)=>a.corrected<b.corrected?a:b);
+      const response=await apiFetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activityMode:mode,systemType:$('systemType').value,nameA:$('nameA').value,nameB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,tm1,tm2,h1,h2,points})});
+      const body=await response.json(); if(!response.ok)throw new Error(body.error||'Model inference failed.'); body.predictions.forEach((v,i)=>points[i].corrected=v); min=points.filter(p=>Number.isFinite(p.corrected)).reduce((a,b)=>a.corrected<b.corrected?a:b);
     }
     const central=$('useCorrection').checked?min.corrected:min.t;
-    lastResult={created:new Date().toISOString(),method:$('useCorrection').checked?'Exploratory B4 prediction':mode==='ideal'?'ideal SLE':mode==='gamma'?'uploaded activity-coefficient SLE':'simplified COSMO-based SLE',inputs:{componentA:$('nameA').value,componentB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,systemType:$('systemType').value,tm1,tm2,h1,h2,propertyProvenance:sourceSummary()},minimum:{temperature_K:central,composition_xA:min.x},calibratedRange:null,scope:'User-input curve; production profile, applicability and optimized-target deployment checks are not completed by this interface.',points};
+    const correctionModel=mode==='ideal'?'B3':'B4';
+    const physicalMethod=mode==='ideal'?'ideal SLE':mode==='gamma'?'uploaded activity-coefficient SLE':mode==='library'?'library-profile SLE':'uploaded-profile SLE';
+    lastResult={created:new Date().toISOString(),method:$('useCorrection').checked?`${correctionModel} corrected prediction`:physicalMethod,inputs:{componentA:$('nameA').value,componentB:$('nameB').value,smilesA:$('smilesA').value,smilesB:$('smilesB').value,systemType:$('systemType').value,tm1,tm2,h1,h2,propertyProvenance:sourceSummary(),activityRoute:mode},minimum:{temperature_K:central,composition_xA:min.x},calibratedRange:null,scope:'User-input curve; production applicability and optimized-target deployment checks are not completed by this interface.',points};
     $('minTemp').textContent=`${central.toFixed(1)} K`; $('minX').textContent=min.x.toFixed(2); $('methodLabel').textContent=lastResult.method;
     $('interval').textContent='Not assessed';$('intervalNote').textContent='User-input curves are not yet production-calibrated';$('xRangeNote').textContent='97-point search · mole fraction, not mass fraction';
     $('support').textContent=support[0];$('supportNote').textContent=support[1];$('propertyProv').textContent=sourceSummary();
-    $('gammaProv').textContent=mode==='ideal'?'Ideal fallback (γ = 1)':mode==='gamma'?'User-supplied γ(x)':'Uploaded sigma profiles';
+    $('gammaProv').textContent=mode==='ideal'?'Ideal assumption (γ = 1)':mode==='gamma'?'User-supplied γ(x)':mode==='library'?'Matched library sigma profiles':'Uploaded sigma profiles';
     $('interpretTitle').textContent=$('useCorrection').checked?'Exploratory model curve':'Physical reference calculated';$('statusDot').style.background='#13a6ad';
     $('interpretText').textContent=`The ${lastResult.method} minimum is ${central.toFixed(1)} K near xA = ${min.x.toFixed(2)}. Use the curve to explore composition. Experimental priority and DES formation are not established by this calculation.`;
     draw(points,min);
@@ -143,14 +166,19 @@ function draw(points,min){
 }
 function download(name,obj,type='application/json'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([typeof obj==='string'?obj:JSON.stringify(obj,null,2)],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href);}
 function queue(){return JSON.parse(localStorage.getItem('des-update-queue')||'[]');}function updateCount(){$('queueCount').textContent=queue().length;}
-document.querySelectorAll('input[name=activity]').forEach(r=>r.addEventListener('change',()=>{$('gammaPanel').classList.toggle('hidden',r.value!=='gamma'||!r.checked);$('sigmaPanel').classList.toggle('hidden',r.value!=='sigma'||!r.checked);}));
+document.querySelectorAll('input[name=activity]').forEach(r=>r.addEventListener('change',()=>{
+  $('gammaPanel').classList.toggle('hidden',r.value!=='gamma'||!r.checked);$('sigmaPanel').classList.toggle('hidden',r.value!=='sigma'||!r.checked);
+  if(r.checked){$('correctionName').textContent=r.value==='ideal'?'B3 ideal-SLE correction':'B4 non-ideal-SLE correction';$('correctionDescription').textContent=r.value==='ideal'?'Structure + composition + pure properties + ideal SLE':'Adds the selected non-ideal SLE features';}
+}));
 $('gammaFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const rows=parseCSV(await f.text()).map(r=>({x:Number(r.x),gamma1:Number(r.gamma1),gamma2:Number(r.gamma2)})).sort((a,b)=>a.x-b.x);if(rows.length<2||rows.some((r,i)=>Object.values(r).some(v=>!Number.isFinite(v))||r.x<0||r.x>1||r.gamma1<=0||r.gamma2<=0||(i>0&&r.x===rows[i-1].x))||rows[0].x>.02||rows.at(-1).x<.98){gammaUpload=null;$('gammaFileName').textContent='Use positive γ values, unique x values, and coverage from 0.02 to 0.98.';return;}gammaUpload=rows;$('gammaFileName').textContent=f.name;});
 $('calculate').addEventListener('click',calculate);$('exportResult').addEventListener('click',()=>lastResult?download('des-screening-result.json',lastResult):null);
 $('resolveProperties').addEventListener('click',resolveProperties);
-$('smilesA').addEventListener('input',()=>{propertyResolution.A=null;$('resolveNoteA').textContent='Structure changed; resolve properties again.';$('resolveNoteA').className='resolve-note';});
-$('smilesB').addEventListener('input',()=>{propertyResolution.B=null;$('resolveNoteB').textContent='Structure changed; resolve properties again.';$('resolveNoteB').className='resolve-note';});
+$('predictMissing').addEventListener('click',predictMissing);
+function invalidateLookup(side){propertyResolution[side]=null;librarySigmaA=librarySigmaB=null;$('libraryActivityOption').classList.add('hidden');$('missingChoice').classList.add('hidden');$(`resolveNote${side}`).textContent='Structure changed; search the libraries again.';$(`resolveNote${side}`).className='resolve-note';$('profileStatus').textContent='Activity profiles will be checked after both structures are searched.';$('profileStatus').className='profile-status';}
+$('smilesA').addEventListener('input',()=>invalidateLookup('A'));
+$('smilesB').addEventListener('input',()=>invalidateLookup('B'));
 $('loadDemo').addEventListener('click',()=>{Object.entries({nameA:'Illustrative component A',nameB:'Illustrative component B',smilesA:'NC(=O)N',smilesB:'CC(=O)N',tmA:405,tmB:353,hfA:14.5,hfB:12}).forEach(([k,v])=>$(k).value=v);['tmSourceA','hfSourceA','tmSourceB','hfSourceB'].forEach(id=>$(id).value='model');['A','B'].forEach(side=>{propertyResolution[side]=null;$(`resolveNote${side}`).textContent='Demonstration values only — not reviewed measurements.';});$('useCorrection').checked=false;document.querySelector('input[name=activity][value=ideal]').click();calculate();});
 $('saveMeasurement').addEventListener('click',()=>{const value=Number($('measurementValue').value);if(!Number.isFinite(value))return;const q=queue();q.push({created:new Date().toISOString(),type:$('measurementType').value,value,note:$('measurementNote').value,system:lastResult?.inputs||null});localStorage.setItem('des-update-queue',JSON.stringify(q));$('measurementValue').value='';$('measurementNote').value='';updateCount();});
 $('exportQueue').addEventListener('click',()=>download('des-model-update-queue.json',{exported:new Date().toISOString(),policy:'candidate for reviewed periodic release; no online retraining',records:queue()}));
 updateCount();$('curveChart').innerHTML='<text x="380" y="175" text-anchor="middle" font-size="20" fill="#64758a">Your composition curve will appear here</text><text x="380" y="212" text-anchor="middle" font-size="16" fill="#64758a">Load the example to try the calculator</text>';
-fetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';$('connectionStatus').textContent='Local prediction service connected';$('serviceNotice').textContent='Enter two SMILES and complete pure properties, or enter your measured values. Advanced activity inputs are optional for physical curves; model predictions require non-ideal inputs.';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed components · four frozen models ready`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B4 inference service connected';}).catch(()=>{});
+apiFetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';$('connectionStatus').textContent='Local libraries and prediction service connected';$('serviceNotice').textContent='Enter two SMILES and search first. Reviewed experimental properties and matched sigma profiles are displayed automatically; missing inputs wait for your choice.';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed property entries · ${body.profiles?.unique_components?.toLocaleString()||'profile'} profile-capable components`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B3/B4 inference service connected';}).catch(()=>{});

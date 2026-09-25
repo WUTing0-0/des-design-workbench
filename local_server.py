@@ -1,4 +1,4 @@
-"""Serve the workbench and expose the frozen B4 model from the paper release."""
+"""Serve the workbench and expose the frozen B3/B4 models and reviewed libraries."""
 from __future__ import annotations
 
 import importlib.util
@@ -20,6 +20,7 @@ RELEASE = Path(os.environ.get("DES_WORKFLOW_ROOT", r"C:\code2026\DES_Paper_Relea
 PROJECT = Path(os.environ.get("DES_PROJECT_ROOT", r"C:\code2026")).resolve()
 MODULE_PATH = RELEASE / "77_salt_tm_role_context_propagation_v1" / "run_dense_grid_chunk_v76.py"
 PACK_PATH = RELEASE / "77_salt_tm_role_context_propagation_v1" / "benchmark_model" / "FULL_CANONICAL_B4_B5_PACK.joblib"
+B3_PACK_PATH = RELEASE / "77_salt_tm_role_context_propagation_v1" / "benchmark_model" / "FULL_CANONICAL_B3_PACK.joblib"
 
 os.environ.setdefault("DES_WORKFLOW_ROOT", str(RELEASE))
 os.environ.setdefault("DES_PROJECT_ROOT", str(PROJECT))
@@ -28,12 +29,38 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 pack = joblib.load(PACK_PATH)
+b3_pack = joblib.load(B3_PACK_PATH)
 property_resolver = PropertyResolver()
+runner = module.load_runner()
+profile_loader, profile_cache = module.build_profile_loader(runner)
+profile_coverage = pd.read_csv(module.COVERAGE)
+profile_coverage = profile_coverage[
+    profile_coverage.matched.astype(str).str.lower().isin(["true", "1", "yes"])
+].copy()
+profile_component_count = profile_coverage.component_smiles.map(module.canonical_smiles).nunique()
+
+
+def profile_lookup(name: str | None, smiles: str) -> dict:
+    canonical = module.canonical_smiles(smiles)
+    try:
+        profile = profile_loader(name or canonical, canonical)
+    except (FileNotFoundError, KeyError, ValueError):
+        return {"available": False, "canonical_smiles": canonical}
+    return {
+        "available": True,
+        "canonical_smiles": canonical,
+        "profile_name": profile["name"],
+        "sigma": [float(v) for v in runner.SLE.CORE.SIGMA_GRID],
+        "p_sigma": [float(v) for v in profile["p_norm"]],
+        "area": float(profile["area"]),
+        "volume": float(profile["volume"]),
+    }
 
 
 def predict(payload: dict) -> list[float]:
-    if payload.get('activityMode') not in {'sigma', 'gamma'}:
-        raise ValueError('B4 requires non-ideal features. Ideal SLE is available as a physical reference only.')
+    activity_mode = payload.get('activityMode')
+    if activity_mode not in {'ideal', 'sigma', 'library', 'gamma'}:
+        raise ValueError('Choose ideal, library sigma profiles, uploaded sigma profiles or uploaded gamma values.')
     from rdkit import Chem
     for field in ['smilesA', 'smilesB']:
         if not payload.get(field) or Chem.MolFromSmiles(payload[field]) is None:
@@ -58,11 +85,12 @@ def predict(payload: dict) -> list[float]:
              "hardmax_branch1_K": p.get("b1"), "hardmax_branch2_K": p.get("b2")} for p in payload["points"]]
     points = pd.DataFrame(rows)
     data, block = module.build_b4_block(points)
-    numeric = pack["imputer"].transform(block.reindex(columns=pack["numeric_columns"]))
+    selected = b3_pack if activity_mode == "ideal" else pack
+    numeric = selected["imputer"].transform(block.reindex(columns=selected["numeric_columns"]))
     _, text_cols = module.normalize_library_columns(data, "ratio")
-    z = pack["svd"].transform(pack["vectorizer"].transform(module.component_text(data, text_cols)))
-    X = pack["scaler"].transform(np.hstack([numeric, z]))
-    return [float(v) for v in pack["direct_model"].predict(X)]
+    z = selected["svd"].transform(selected["vectorizer"].transform(module.component_text(data, text_cols)))
+    X = selected["scaler"].transform(np.hstack([numeric, z]))
+    return [float(v) for v in selected["direct_model"].predict(X)]
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -72,13 +100,28 @@ class Handler(SimpleHTTPRequestHandler):
     def send_json(self, status: int, value: dict):
         body = json.dumps(value).encode("utf-8")
         self.send_response(status); self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.end_headers()
 
     def do_GET(self):
         if self.path == "/api/health":
             return self.send_json(200, {
-                "status": "ready", "model": "frozen B4 direct",
+                "status": "ready", "model": "route-specific frozen direct model",
+                "models": {"ideal": "frozen B3 direct", "nonideal": "frozen B4 direct"},
                 "properties": property_resolver.ready_summary,
+                "profiles": {
+                    "status": "ready", "matched_records": len(profile_coverage),
+                    "unique_components": int(profile_component_count),
+                },
             })
         return super().do_GET()
 
@@ -91,9 +134,11 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError('Request must contain at most 2 MB of JSON.')
             payload = json.loads(self.rfile.read(size))
             if self.path == "/api/properties":
-                return self.send_json(200, property_resolver.resolve(
-                    payload.get("smiles", ""), payload.get("componentClass")
-                ))
+                action = payload.get("action", "lookup")
+                resolver = property_resolver.resolve if action == "complete" else property_resolver.lookup_only
+                result = resolver(payload.get("smiles", ""), payload.get("componentClass"))
+                result["profile"] = profile_lookup(result.get("name"), result["canonical_smiles"])
+                return self.send_json(200, result)
             return self.send_json(200, {"predictions": predict(payload)})
         except Exception as exc:
             return self.send_json(400, {"error": f"{type(exc).__name__}: {exc}"})

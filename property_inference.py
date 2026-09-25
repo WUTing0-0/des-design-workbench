@@ -15,7 +15,6 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-import torch
 from rdkit import Chem, rdBase
 
 
@@ -29,18 +28,6 @@ OLD = PROJECT / "outputs_v3" / "outputs_v3"
 CHEMBERTA = PROJECT / "models" / "models" / "ChemBERTa-zinc-base-v1"
 TABPFN_CKPT = PROJECT / "数据" / "数据" / "训练" / "tabpfn-v2.6-regressor-v2.6_default.ckpt"
 os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
-
-if str(LEGACY) not in sys.path:
-    sys.path.insert(0, str(LEGACY))
-
-from config import Config  # noqa: E402
-from data.feature_extractor import compute_raw_features  # noqa: E402
-from data.mol_graph import smiles_to_graph  # noqa: E402
-from models.chemberta import ThermalBERTa  # noqa: E402
-from models.full_model_v3 import PretrainModel  # noqa: E402
-from tabpfn import TabPFNRegressor  # noqa: E402
-from torch_geometric.loader import DataLoader  # noqa: E402
-
 
 METRICS = {
     "neutral": {"tm": (22.0788898468, "four-layer GIN"), "hfus": (10.9468774851, "TabPFN")},
@@ -71,20 +58,6 @@ def salt_parts(canonical: str) -> tuple[str, str] | None:
     return None
 
 
-class _SmilesDataset(torch.utils.data.Dataset):
-    def __init__(self, smiles: list[str]):
-        self.smiles = smiles
-
-    def __len__(self):
-        return len(self.smiles)
-
-    def __getitem__(self, index):
-        graph = smiles_to_graph(self.smiles[index])
-        if graph is None:
-            raise ValueError(f"Cannot build molecular graph for {self.smiles[index]!r}")
-        return graph
-
-
 class PropertyResolver:
     def __init__(self):
         master_path = P77 / "property_master" / "PURE_PROPERTY_MASTER_EXPERIMENT_FIRST.csv"
@@ -97,6 +70,10 @@ class PropertyResolver:
         self._tm_gin = None
         self._tab_models: dict[str, tuple[dict, object]] = {}
         self._recipes: dict[str, dict] = {}
+        self._Config = None
+        self._PretrainModel = None
+        self._smiles_to_graph = None
+        self._compute_raw_features = None
 
     @property
     def ready_summary(self) -> dict:
@@ -115,11 +92,21 @@ class PropertyResolver:
     def _load_encoders(self):
         if self._bert is not None:
             return
+        import torch
+        if str(LEGACY) not in sys.path:
+            sys.path.insert(0, str(LEGACY))
+        from config import Config
+        from data.feature_extractor import compute_raw_features
+        from data.mol_graph import smiles_to_graph
+        from models.chemberta import ThermalBERTa
+        from models.full_model_v3 import PretrainModel
         bert = ThermalBERTa(str(CHEMBERTA)).eval()
         bert.load_state_dict(torch.load(OLD / "thermal_bert.pt", map_location="cpu", weights_only=True), strict=True)
         gin = PretrainModel(Config()).eval()
         gin.load_state_dict(torch.load(OLD / "gin_melt_encoder.pt", map_location="cpu", weights_only=True), strict=True)
         self._bert, self._feature_gin = bert, gin
+        self._Config, self._PretrainModel = Config, PretrainModel
+        self._smiles_to_graph, self._compute_raw_features = smiles_to_graph, compute_raw_features
 
     def _recipe(self, task: str, path: Path) -> dict:
         if task not in self._recipes:
@@ -127,11 +114,13 @@ class PropertyResolver:
         return self._recipes[task]
 
     def _raw_features(self, smiles: list[str]) -> dict[str, np.ndarray]:
+        import torch
+        from torch_geometric.loader import DataLoader
         self._load_encoders()
         with rdBase.BlockLogs():
-            morgan, rdkit = compute_raw_features(smiles)
+            morgan, rdkit = self._compute_raw_features(smiles)
         bert = self._bert.extract_cls(smiles, torch.device("cpu"), batch_size=min(16, len(smiles)))
-        graphs = [smiles_to_graph(s) for s in smiles]
+        graphs = [self._smiles_to_graph(s) for s in smiles]
         if any(g is None for g in graphs):
             raise ValueError("A molecular graph could not be generated.")
         gin_rows = []
@@ -143,22 +132,29 @@ class PropertyResolver:
         return {"morgan": morgan, "rdkit": rdkit, "bert": bert, "gin": np.concatenate(gin_rows)}
 
     def _neutral_tm(self, smiles: str) -> float:
+        import torch
+        from torch_geometric.loader import DataLoader
+        self._load_encoders()
         if self._tm_gin is None:
             manifest = pd.read_json(P76 / "models" / "organic_tm_gin_full_manifest.json", typ="series")
-            model = PretrainModel(Config()).eval()
+            model = self._PretrainModel(self._Config()).eval()
             model.load_state_dict(torch.load(
                 P76 / "models" / "organic_tm_gin_full" / "model_state.pt",
                 map_location="cpu", weights_only=True,
             ))
             self._tm_gin = (model, float(manifest.target_mean), float(manifest.target_std))
         model, mean, std = self._tm_gin
-        graph = next(iter(DataLoader(_SmilesDataset([smiles]), batch_size=1)))
+        graph = self._smiles_to_graph(smiles)
+        if graph is None:
+            raise ValueError(f"Cannot build a molecular graph for {smiles!r}")
+        graph = next(iter(DataLoader([graph], batch_size=1)))
         with torch.no_grad():
             value = float(model(graph).cpu().numpy().ravel()[0] * std + mean)
         return value
 
     def _tabpfn(self, task: str, query: np.ndarray) -> float:
         if task not in self._tab_models:
+            from tabpfn import TabPFNRegressor
             path = {
                 "neutral_hfus": P76 / "models" / "organic_hfus_production_recipe.joblib",
                 "salt_hfus": P76 / "models" / "salt_hfus_production_recipe.joblib",
@@ -208,6 +204,44 @@ class PropertyResolver:
         else:
             query = ((tab[0:1] + tab[1:2]) / 2).astype(np.float32)
         return self._tabpfn(task, query)
+
+    def lookup_only(self, smiles: str, force_class: str | None = None) -> dict:
+        """Return reviewed experimental values without silently imputing gaps."""
+        canonical = canonicalize(smiles)
+        parts = salt_parts(canonical)
+        inferred_class = "salt" if parts else "neutral"
+        if force_class in {"neutral", "salt"} and force_class != inferred_class:
+            if force_class == "salt":
+                raise ValueError("The selected salt class needs a dot-separated cation and anion SMILES.")
+            raise ValueError("The structure contains a charged ion pair; choose salt.")
+        component_class = force_class or inferred_class
+        record = self.lookup.get(canonical)
+        result = {
+            "canonical_smiles": canonical,
+            "component_class": component_class,
+            "matched_database": record is not None,
+            "name": (getattr(record, "component_name", None) if record is not None else None),
+            "properties": {},
+        }
+        for prop, exp_col, unit in (
+            ("tm", "Tm_experimental", "K"),
+            ("hfus", "Hfus_experimental", "kJ mol-1"),
+        ):
+            value = getattr(record, exp_col, np.nan) if record is not None else np.nan
+            result["properties"][prop] = {
+                "available": bool(pd.notna(value)),
+                "value": float(value) if pd.notna(value) else None,
+                "unit": unit,
+                "origin": "experimental" if pd.notna(value) else "missing",
+            }
+        result["complete_experimental"] = all(
+            item["available"] for item in result["properties"].values()
+        )
+        result["requires_user_choice"] = not result["complete_experimental"]
+        if component_class == "salt":
+            result["ions"] = {"cation": parts[0], "anion": parts[1]}
+            result["warning"] = "Unseen anions are the main transfer limitation for salt properties."
+        return result
 
     def resolve(self, smiles: str, force_class: str | None = None) -> dict:
         with self.lock:

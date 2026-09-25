@@ -2,28 +2,28 @@
 
 A provenance-aware interface for exploring binary liquidus predictions. The currently implemented local calculation is:
 
-`SMILES → reviewed property lookup → missing-property inference → SLE/reference curve → optional exploratory B4 prediction`
+`SMILES → reviewed property/profile lookup → explicit choice for missing inputs → SLE/reference curve → B3 or B4 correction`
 
 ## What the interface does
 
 1. Accepts two molecular structures as SMILES.
 2. Canonicalizes each structure and searches the frozen, experiment-first pure-property table.
-3. Preserves reviewed experimental melting points and fusion enthalpies. Only missing values are predicted:
+3. Preserves reviewed experimental melting points and fusion enthalpies. A library search never fills a gap silently; the user must enter a value or explicitly request one of the four frozen property models:
    - neutral melting point: four-layer GIN;
    - neutral fusion enthalpy: TabPFN;
    - salt melting point: role-aware cation/anion G-TabPFN;
    - salt fusion enthalpy: TabPFN.
-4. Calculates the binary hard-max SLE curve from `x = 0.02–0.98` using either ideal activity coefficients, a user-supplied `gamma(x)` table, or two sigma profiles.
-5. Applies the frozen B4 phase-equilibrium model when the local service is available.
+4. Searches the canonical sigma-profile inventory. When both components are present, their profiles are displayed and selected automatically. Otherwise the interface waits for the user to choose ideal coefficients, upload `gamma(x)`, or upload two profiles.
+5. Calculates the binary hard-max SLE curve from `x = 0.02–0.98`. The frozen B3 direct model corrects the ideal-SLE route; the frozen B4 direct model corrects non-ideal routes.
 6. Reports the curve and input provenance. Formal applicability and optimized-target interval deployment are not yet integrated for arbitrary user inputs; the interface explicitly says **Not assessed** instead of applying an obsolete pooled interval.
 
-The hosted static preview performs the physical browser calculation. Full property inference and B4 correction run locally because the frozen scientific models, reviewed database and third-party foundation weights are not embedded in the public website.
+The hosted interface performs physical browser calculations and automatically connects to a local service at `127.0.0.1:4173` when it is running. Reviewed-library search, missing-property inference and B3/B4 correction remain local because the frozen scientific models, reviewed database and third-party foundation weights are not embedded in the hosted site.
 
 ## Run the full local workflow
 
 For a quick browser demonstration, click **Load example**, then inspect the composition curve. Example inputs are illustrative, not reviewed experimental measurements. For your own system, enter four measured properties, or start the local service to resolve missing values from SMILES. Activity inputs and optional model settings are collapsed under **Activity coefficients and model options**. Pure physical prediction remains available without a model server.
 
-The browser uses a simplified COSMO-based electrostatic/size–shape implementation when sigma profiles are supplied; it does not implement every standard COSMO-SAC variant. Ideal gamma = 1 is a physical fallback only, not a validated replacement for the non-ideal features of the trained B4 model. The server rejects that substitution.
+The browser uses the workflow's simplified COSMO-based electrostatic/size–shape implementation when sigma profiles are supplied; it does not implement every standard COSMO-SAC variant. Ideal `gamma = 1` is corrected with B3, whose inputs are structure, composition, pure properties and ideal-SLE features. It is not mislabeled as B4, because B4 additionally requires non-ideal features.
 
 Create a Python environment compatible with `requirements-local.txt`. The tested Windows environment uses Python 3.12, PyTorch 2.6 CPU, RDKit 2026.03.4, scikit-learn 1.5.2 and the TabPFN 7.1.1 runtime with the frozen v2.6 regression checkpoint. Then set these optional paths if your release is not stored in the defaults:
 
@@ -52,14 +52,14 @@ The repository intentionally excludes raw licensed datasets, pretrained foundati
 
 - Experimental pure-component values are used only after identity, units, solid form and transition meaning have been reviewed.
 - Model MAEs are population-level reference errors, not molecule-specific confidence probabilities.
-- User-input B4 outputs are exploratory. Manuscript-calibrated ranges must not be applied until profile identity, input regime, numerical eligibility and production applicability have been checked. The website does not yet perform that complete deployment check.
+- User-input B3/B4 outputs are exploratory. Manuscript-calibrated ranges must not be applied until profile identity, input regime, numerical eligibility and production applicability have been checked. The website does not yet perform that complete deployment check.
 - A low predicted liquidus temperature is not evidence of DES formation, novelty, safety, single-phase stability or experimental reproducibility.
 - Submitted measurements enter a review queue. The published model is updated only in a new versioned release; it is never retrained silently online.
 
 ## Repository layout
 
 - `dist/`: static browser interface and physical calculations.
-- `local_server.py`: local HTTP service for B4 and property resolution.
+- `local_server.py`: local HTTP service for library lookup and B3/B4 correction.
 - `property_inference.py`: experiment-first lookup and unified four-model inference interface.
 - `MODEL_MANIFEST.json`: frozen artifact contract and hashes.
 - `requirements-local.txt`: local runtime requirements.
