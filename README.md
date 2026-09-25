@@ -33,7 +33,7 @@ DES_PROJECT_ROOT=C:\code2026
 DES_TABPFN_DEVICE=cpu
 ```
 
-Start `local_server.py` and open `http://127.0.0.1:4173`.
+Start `.venv\Scripts\python.exe local_server.py`. You can then keep using the hosted private URL—the page automatically connects to `http://127.0.0.1:4173`—or open the local URL directly.
 
 The first unseen-molecule inference is slow on CPU because the molecular encoders and TabPFN context are loaded once. A CUDA environment is recommended for repeated arbitrary-structure inference. Exact database matches return immediately. The frozen scientific setting uses 16 TabPFN estimators; `DES_TABPFN_ESTIMATORS` exists only for smoke testing and must not be used for reported results.
 
