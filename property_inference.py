@@ -84,6 +84,7 @@ class PropertyResolver:
             "status": "ready",
             "database_rows": len(self.master),
             "distribution": "portable example library" if self.portable else "full reviewed research library",
+            "inference_available": not self.portable,
             "policy": "experiment-first; model only when missing",
             "models": {
                 "neutral_tm": "four-layer GIN, MAE 22.08 K",

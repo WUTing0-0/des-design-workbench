@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "release_assets"
-NAME = "DES_Design_Workbench_Portable_v0.2.0"
+NAME = "DES_Design_Workbench_Portable_v0.3.0"
 
 INCLUDE = [
     "dist", "examples/thymol_octanoic_acid", "portable_data", "portable_runtime",

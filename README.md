@@ -43,7 +43,7 @@ The repository intentionally excludes raw licensed datasets, pretrained foundati
 
 ## Portable download
 
-`release_assets/DES_Design_Workbench_Portable_v0.2.0.zip` is built as a standalone local package. It does not depend on ChatGPT: users unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The archive includes the validated example and frozen B3/B4 phase-equilibrium models. Third-party molecular foundation models are deliberately not redistributed; outside the bundled reviewed example, users can supply measured pure properties and activity inputs manually. See `PORTABLE_README_CN.md`.
+`release_assets/DES_Design_Workbench_Portable_v0.3.0.zip` is built as a standalone local package. It does not depend on ChatGPT: users unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The archive includes the validated example and frozen B3/B4 phase-equilibrium models. Version 0.3.0 separates the calibrated-range field from the pair-specific example check, exports both a report and a composition-curve CSV, and prevents the portable interface from offering unavailable pure-property inference. Third-party molecular foundation models are deliberately not redistributed; outside the bundled reviewed example, users can supply measured pure properties and activity inputs manually. See `PORTABLE_README_CN.md`.
 
 ## Input formats
 

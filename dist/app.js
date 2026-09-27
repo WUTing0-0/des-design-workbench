@@ -8,6 +8,8 @@ let sigmaA = null, sigmaB = null;
 let librarySigmaA = null, librarySigmaB = null;
 let modelServiceReady = false;
 let propertyServiceReady = false;
+let propertyInferenceReady = false;
+let validatedExampleLoaded = false;
 const propertyResolution = {A:null,B:null};
 
 function parseCSV(text){
@@ -63,6 +65,7 @@ function sourceSummary(){
   return model?`${4-model}/4 experimental; ${model}/4 estimated`:'4/4 experimental inputs';
 }
 function supportSummary(){
+  if(validatedExampleLoaded)return ['Example checked','10 held-out points: MAE 2.47 K; maximum error 5.85 K'];
   return ['Not assessed','Property provenance is not an applicability score'];
 }
 function propertyLine(result){
@@ -93,6 +96,12 @@ async function resolveProperties(){
     const a=await resolveComponent('A','lookup'),b=await resolveComponent('B','lookup');
     $('systemType').value=a.component_class==='neutral'&&b.component_class==='neutral'?'neutral-neutral':a.component_class==='salt'&&b.component_class==='salt'?'salt-salt':'salt-neutral';
     const missing=[a,b].some(x=>x.requires_user_choice);$('missingChoice').classList.toggle('hidden',!missing);
+    $('predictMissing').classList.toggle('hidden',missing&&!propertyInferenceReady);
+    $('missingChoiceText').textContent=propertyInferenceReady?'Enter measured values yourself, or explicitly ask the frozen property models to fill only the missing fields.':'Enter measured values in the highlighted fields. The portable package does not redistribute the third-party pure-property models.';
+    for(const side of ['A','B'])for(const prop of ['tm','hf']){
+      const key=prop==='tm'?'tm':'hfus';
+      $(`${prop}${side}`).classList.toggle('missing-input',!propertyResolution[side].properties[key].available);
+    }
     button.querySelector('span').textContent='Search reviewed property and profile libraries';
     $('propertyServiceLabel').textContent=missing?'Missing inputs await your choice':'All four pure properties found as reviewed experiments';
     if(a.profile.available&&b.profile.available){
@@ -172,14 +181,21 @@ document.querySelectorAll('input[name=activity]').forEach(r=>r.addEventListener(
 }));
 $('gammaFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const rows=parseCSV(await f.text()).map(r=>({x:Number(r.x),gamma1:Number(r.gamma1),gamma2:Number(r.gamma2)})).sort((a,b)=>a.x-b.x);if(rows.length<2||rows.some((r,i)=>Object.values(r).some(v=>!Number.isFinite(v))||r.x<0||r.x>1||r.gamma1<=0||r.gamma2<=0||(i>0&&r.x===rows[i-1].x))||rows[0].x>.02||rows.at(-1).x<.98){gammaUpload=null;$('gammaFileName').textContent='Use positive γ values, unique x values, and coverage from 0.02 to 0.98.';return;}gammaUpload=rows;$('gammaFileName').textContent=f.name;});
 $('calculate').addEventListener('click',calculate);$('exportResult').addEventListener('click',()=>lastResult?download('des-screening-result.json',lastResult):null);
+$('exportCurve').addEventListener('click',()=>{
+  if(!lastResult)return;
+  const header='x_A,physical_SLE_K,model_corrected_K,gamma1,gamma2';
+  const body=lastResult.points.map(p=>[p.x,p.t,Number.isFinite(p.corrected)?p.corrected:'',p.gamma1,p.gamma2].join(',')).join('\n');
+  download('des-composition-curve.csv',`${header}\n${body}`,'text/csv');
+});
 $('resolveProperties').addEventListener('click',resolveProperties);
 $('predictMissing').addEventListener('click',predictMissing);
-function invalidateLookup(side){propertyResolution[side]=null;librarySigmaA=librarySigmaB=null;$(`tm${side}`).value='';$(`hf${side}`).value='';$(`tmSource${side}`).value='experimental';$(`hfSource${side}`).value='experimental';$('libraryActivityOption').classList.add('hidden');$('missingChoice').classList.add('hidden');$(`resolveNote${side}`).textContent='Structure changed; search the libraries again.';$(`resolveNote${side}`).className='resolve-note';$('profileStatus').textContent='Activity profiles will be checked after both structures are searched.';$('profileStatus').className='profile-status';}
+function invalidateLookup(side){validatedExampleLoaded=false;propertyResolution[side]=null;librarySigmaA=librarySigmaB=null;$(`tm${side}`).value='';$(`hf${side}`).value='';$(`tm${side}`).classList.remove('missing-input');$(`hf${side}`).classList.remove('missing-input');$(`tmSource${side}`).value='experimental';$(`hfSource${side}`).value='experimental';$('libraryActivityOption').classList.add('hidden');$('missingChoice').classList.add('hidden');$(`resolveNote${side}`).textContent='Structure changed; search the libraries again.';$(`resolveNote${side}`).className='resolve-note';$('profileStatus').textContent='Activity profiles will be checked after both structures are searched.';$('profileStatus').className='profile-status';}
 $('smilesA').addEventListener('input',()=>invalidateLookup('A'));
 $('smilesB').addEventListener('input',()=>invalidateLookup('B'));
 $('loadDemo').addEventListener('click',async()=>{
   $('errorBox').classList.add('hidden');
   try{
+    validatedExampleLoaded=true;
     const example=await fetch('examples/thymol_octanoic_acid.json').then(r=>{if(!r.ok)throw new Error('The bundled example could not be loaded.');return r.json();});
     const [a,b]=example.components;
     Object.entries({nameA:a.name,nameB:b.name,smilesA:a.smiles,smilesB:b.smiles,tmA:a.properties.tm_K,tmB:b.properties.tm_K,hfA:a.properties.hfus_kJ_mol,hfB:b.properties.hfus_kJ_mol}).forEach(([k,v])=>$(k).value=v);
@@ -201,4 +217,4 @@ $('loadDemo').addEventListener('click',async()=>{
 $('saveMeasurement').addEventListener('click',()=>{const value=Number($('measurementValue').value);if(!Number.isFinite(value))return;const q=queue();q.push({created:new Date().toISOString(),type:$('measurementType').value,value,note:$('measurementNote').value,system:lastResult?.inputs||null});localStorage.setItem('des-update-queue',JSON.stringify(q));$('measurementValue').value='';$('measurementNote').value='';updateCount();});
 $('exportQueue').addEventListener('click',()=>download('des-model-update-queue.json',{exported:new Date().toISOString(),policy:'candidate for reviewed periodic release; no online retraining',records:queue()}));
 updateCount();$('curveChart').innerHTML='<text x="380" y="175" text-anchor="middle" font-size="20" fill="#64758a">Your composition curve will appear here</text><text x="380" y="212" text-anchor="middle" font-size="16" fill="#64758a">Load the example to try the calculator</text>';
-apiFetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';$('connectionStatus').textContent='Local libraries and prediction service connected';$('serviceNotice').textContent='Enter two SMILES and search first. Reviewed experimental properties and matched sigma profiles are displayed automatically; missing inputs wait for your choice.';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed property entries · ${body.profiles?.unique_components?.toLocaleString()||'profile'} profile-capable components`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B3/B4 inference service connected';}).catch(()=>{});
+apiFetch('/api/health').then(r=>r.ok?r.json():Promise.reject()).then(body=>{modelServiceReady=true;propertyServiceReady=body.properties?.status==='ready';propertyInferenceReady=body.properties?.inference_available===true;$('connectionStatus').textContent='Local libraries and prediction service connected';$('serviceNotice').textContent=propertyInferenceReady?'Enter two SMILES and search first. Reviewed experimental properties and matched sigma profiles are displayed automatically; missing inputs wait for your choice.':'Portable mode is ready. The validated example runs completely; for other systems, enter measured pure properties and choose an activity-coefficient route.';$('useCorrection').disabled=false;$('resolveProperties').disabled=!propertyServiceReady;if(propertyServiceReady)$('propertyServiceLabel').textContent=`${body.properties.database_rows.toLocaleString()} reviewed property entries · ${body.profiles?.unique_components?.toLocaleString()||'profile'} profile-capable components`;const row=$('useCorrection').closest('.switch-row');row.classList.add('ready');row.querySelector('em').textContent='ready';row.querySelector('small').textContent='Frozen B3/B4 inference service connected';}).catch(()=>{});
