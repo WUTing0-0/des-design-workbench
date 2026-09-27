@@ -2,7 +2,7 @@
 
 A provenance-aware interface for exploring binary liquidus predictions.
 
-This repository and its portable download are public. No GitHub access approval is required. The separate scientific archive is still undergoing third-party data redistribution review.
+Download the portable package below to run the interface on your own computer. No GitHub access approval or ChatGPT account is required.
 
 The currently implemented local calculation is:
 
@@ -23,7 +23,7 @@ The currently implemented local calculation is:
 
 The hosted interface performs physical browser calculations and automatically connects to a local service at `127.0.0.1:4173` when it is running. Reviewed-library search, missing-property inference and B3/B4 correction remain local because the frozen scientific models, reviewed database and third-party foundation weights are not embedded in the hosted site.
 
-The current paper data and supplementary-file versions are tracked in the scientific repository's [release status](https://github.com/WUTing0-0/des-physics-ml-atlas/blob/main/docs/RELEASE_STATUS_20260927.md). Its calibrated Atlas intervals should not be applied automatically to arbitrary inputs in this interface. The organic-compound property tasks retain the source-dataset definitions; they are not a claim that every source structure is strictly non-ionic.
+The paper's data and model definitions are indexed in the [scientific repository](https://github.com/WUTing0-0/des-physics-ml-atlas). Atlas-calibrated intervals do not automatically apply to arbitrary interface inputs. The organic-compound property tasks retain the source-dataset definitions.
 
 ## Run the full local workflow
 
@@ -49,9 +49,9 @@ The portable archive includes the frozen B3/B4 mixture models. Third-party found
 
 ## Portable download
 
-`release_assets/DES_Design_Workbench_Portable_v0.3.0.zip` is built as a standalone local package. It does not depend on ChatGPT: users unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The archive includes the validated example and frozen B3/B4 phase-equilibrium models. Version 0.3.0 separates the calibrated-range field from the pair-specific example check, exports both a report and a composition-curve CSV, and prevents the portable interface from offering unavailable pure-property inference. Third-party molecular foundation models are deliberately not redistributed; outside the bundled reviewed example, users can supply measured pure properties and activity inputs manually. See `PORTABLE_README_CN.md`.
+Download [DES Design Workbench v0.3.0](release_assets/DES_Design_Workbench_Portable_v0.3.0.zip), unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The package includes the validated example and frozen B3/B4 phase-equilibrium models. It exports a report and a composition-curve CSV. Outside the bundled reviewed example, supply measured pure properties and activity inputs manually; third-party molecular foundation models are not included. See [installation instructions](PORTABLE_README_CN.md).
 
-The intended user journey and the remaining usability priorities are recorded in [`docs/USER_WORKFLOW_AND_RELEASE_PLAN_CN.md`](docs/USER_WORKFLOW_AND_RELEASE_PLAN_CN.md).
+For a step-by-step calculation, see the [Chinese user guide](docs/USER_GUIDE_CN.md).
 
 ## Input formats
 
