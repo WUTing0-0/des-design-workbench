@@ -9,8 +9,8 @@ A provenance-aware interface for exploring binary liquidus predictions. The curr
 1. Accepts two molecular structures as SMILES.
 2. Canonicalizes each structure and searches the frozen, experiment-first pure-property table.
 3. Preserves reviewed experimental melting points and fusion enthalpies. A library search never fills a gap silently; the user must enter a value or explicitly request one of the four frozen property models:
-   - neutral melting point: four-layer GIN;
-   - neutral fusion enthalpy: TabPFN;
+   - organic-compound melting point: four-layer GIN;
+   - organic-compound fusion enthalpy: TabPFN;
    - salt melting point: role-aware cation/anion G-TabPFN;
    - salt fusion enthalpy: TabPFN.
 4. Searches the canonical sigma-profile inventory. When both components are present, their profiles are displayed and selected automatically. Otherwise the interface waits for the user to choose ideal coefficients, upload `gamma(x)`, or upload two profiles.
@@ -18,6 +18,8 @@ A provenance-aware interface for exploring binary liquidus predictions. The curr
 6. Reports the curve and input provenance. Formal applicability and optimized-target interval deployment are not yet integrated for arbitrary user inputs; the interface explicitly says **Not assessed** instead of applying an obsolete pooled interval.
 
 The hosted interface performs physical browser calculations and automatically connects to a local service at `127.0.0.1:4173` when it is running. Reviewed-library search, missing-property inference and B3/B4 correction remain local because the frozen scientific models, reviewed database and third-party foundation weights are not embedded in the hosted site.
+
+The current paper data and supplementary-file versions are tracked in the scientific repository's [release status](https://github.com/WUTing0-0/des-physics-ml-atlas/blob/main/docs/RELEASE_STATUS_20260927.md). Its calibrated Atlas intervals should not be applied automatically to arbitrary inputs in this interface. The organic-compound property tasks retain the source-dataset definitions; they are not a claim that every source structure is strictly non-ionic.
 
 ## Run the full local workflow
 
