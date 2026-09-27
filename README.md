@@ -1,6 +1,10 @@
 # DES Design Workbench
 
-A provenance-aware interface for exploring binary liquidus predictions. The currently implemented local calculation is:
+A provenance-aware interface for exploring binary liquidus predictions.
+
+This repository and its portable download are public. No GitHub access approval is required. The separate scientific archive is still undergoing third-party data redistribution review.
+
+The currently implemented local calculation is:
 
 `SMILES → reviewed property/profile lookup → explicit choice for missing inputs → SLE/reference curve → B3 or B4 correction`
 
@@ -35,13 +39,13 @@ DES_PROJECT_ROOT=C:\code2026
 DES_TABPFN_DEVICE=cpu
 ```
 
-Start `.venv\Scripts\python.exe local_server.py`. You can then keep using the hosted private URL—the page automatically connects to `http://127.0.0.1:4173`—or open the local URL directly.
+Start `.venv\Scripts\python.exe local_server.py` and open `http://127.0.0.1:4173`. The hosted page can also connect to the running local service.
 
 The first unseen-molecule inference is slow on CPU because the molecular encoders and TabPFN context are loaded once. A CUDA environment is recommended for repeated arbitrary-structure inference. Exact database matches return immediately. The frozen scientific setting uses 16 TabPFN estimators; `DES_TABPFN_ESTIMATORS` exists only for smoke testing and must not be used for reported results.
 
-## Required private/release artifacts
+## Model dependencies
 
-The repository intentionally excludes raw licensed datasets, pretrained foundation checkpoints and frozen model binaries. `MODEL_MANIFEST.json` records their expected release-relative locations, reference metrics and SHA-256 hashes. Publication archives should supply these artifacts through the paper data repository, subject to their original licenses.
+The portable archive includes the frozen B3/B4 mixture models. Third-party foundation checkpoints and restricted source datasets are not included. `MODEL_MANIFEST.json` records the model paths, reference metrics and SHA-256 hashes needed for the full research installation. Obtain third-party dependencies from their approved distribution channels.
 
 ## Portable download
 
