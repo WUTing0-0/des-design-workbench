@@ -1,5 +1,7 @@
 # DES Design Workbench user guide
 
+New users can start with the [70-second demonstration](DEMO.md).
+
 Workbench calculates composition-dependent liquidus curves for a binary mixture using pure-component properties and activity inputs. The supplied frozen models can correct the ideal and non-ideal reference curves.
 
 ## Run the example

@@ -4,6 +4,14 @@ A provenance-aware interface for exploring binary liquidus predictions.
 
 Download the portable package below to run the interface on your own computer. No GitHub access approval or ChatGPT account is required.
 
+## Watch the 70-second demo
+
+[![Workbench quick-start demonstration](docs/media/workbench-demo.gif)](https://github.com/WUTing0-0/des-design-workbench/raw/refs/heads/main/docs/media/workbench-demo.mp4)
+
+**[Watch or download the MP4](https://github.com/WUTing0-0/des-design-workbench/raw/refs/heads/main/docs/media/workbench-demo.mp4)** · [Step-by-step walkthrough](docs/DEMO.md) · [Installation](PORTABLE_README.md)
+
+An English, captioned walkthrough using actual local-interface screenshots: load thymol–octanoic acid, review experimental inputs, choose the activity route, calculate the curve, interpret the output and locate the export controls. The video is edited for readability; it is not a real-time performance benchmark. No audio is required.
+
 The currently implemented local calculation is:
 
 `SMILES → reviewed property/profile lookup → explicit choice for missing inputs → SLE/reference curve → B3 or B4 correction`
