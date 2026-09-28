@@ -31,7 +31,7 @@ os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
 
 METRICS = {
     "neutral": {"tm": (22.0788898468, "four-layer GIN"), "hfus": (10.9468774851, "TabPFN")},
-    "salt": {"tm": (24.999, "role-aware G-TabPFN"), "hfus": (8.7124440256, "TabPFN")},
+    "salt": {"tm": (24.999, "role-aware G-TabPFN"), "hfus": (9.2247263614, "TabPFN")},
 }
 
 
@@ -90,7 +90,7 @@ class PropertyResolver:
                 "neutral_tm": "four-layer GIN, MAE 22.08 K",
                 "neutral_hfus": "TabPFN, MAE 10.95 kJ mol-1",
                 "salt_tm": "role-aware G-TabPFN, MAE 25.00 K",
-                "salt_hfus": "TabPFN, MAE 8.71 kJ mol-1",
+                "salt_hfus": "TabPFN, structure-grouped MAE 9.22 kJ mol-1",
             },
         }
 

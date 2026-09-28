@@ -49,7 +49,7 @@ The portable archive includes the frozen B3/B4 mixture models. Third-party found
 
 ## Portable download
 
-Download [DES Design Workbench v0.3.0](release_assets/DES_Design_Workbench_Portable_v0.3.0.zip), unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The package includes the validated example and frozen B3/B4 phase-equilibrium models. It exports a report and a composition-curve CSV. Outside the bundled reviewed example, supply measured pure properties and activity inputs manually; third-party molecular foundation models are not included. See [installation instructions](PORTABLE_README_CN.md).
+Download [DES Design Workbench v0.3.1](release_assets/DES_Design_Workbench_Portable_v0.3.1.zip), unzip it, run `INSTALL_AND_START_WINDOWS.bat` (or `install_and_start_linux.sh`), and open `http://127.0.0.1:4173`. The package includes the validated example and frozen B3/B4 phase-equilibrium models. It exports a report and a composition-curve CSV. Outside the bundled reviewed example, supply measured pure properties and activity inputs manually; third-party molecular foundation models are not included. See [installation instructions](PORTABLE_README_CN.md).
 
 For a step-by-step calculation, see the [Chinese user guide](docs/USER_GUIDE_CN.md).
 
